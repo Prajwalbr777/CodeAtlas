@@ -8,6 +8,7 @@ from backend.github_source_fetcher import fetch_source_files
 from backend.code_quality_scanner import analyze_source_files
 from backend.ecosystem_scanner import detect_ecosystems
 from backend.dependency_analyzer import analyze_dependencies
+from backend.dependency_version_checker import check_dependency_versions
 
 
 # Create FastAPI application
@@ -15,9 +16,10 @@ app = FastAPI(
     title="CodeAtlas API",
     description=(
         "Codebase intelligence, ecosystem detection, "
-        "code quality and dependency analysis platform"
+        "code quality, dependency analysis and "
+        "dependency version checking platform"
     ),
-    version="1.3.0"
+    version="1.4.0"
 )
 
 
@@ -41,7 +43,8 @@ class RepositoryRequest(BaseModel):
 def home():
     return {
         "message": "Welcome to CodeAtlas!",
-        "status": "Backend is running successfully"
+        "status": "Backend is running successfully",
+        "version": "1.4.0"
     }
 
 
@@ -114,11 +117,16 @@ def analyze_repository(request: RepositoryRequest):
     # Step 5: Analyze declared dependencies
     dependency_result = analyze_dependencies(manifest_files)
 
-    # Step 6: Prepare combined analysis response
+    # Step 6: Check dependency versions
+    version_result = check_dependency_versions(
+        dependency_result["dependencies"]
+    )
+
+    # Step 7: Prepare combined analysis response
     return {
         "message": (
-            "Repository, ecosystem, code quality and "
-            "dependency analysis completed successfully"
+            "Repository, ecosystem, code quality, dependency "
+            "and dependency version analysis completed successfully"
         ),
 
         "analysis": result,
@@ -147,5 +155,15 @@ def analyze_repository(request: RepositoryRequest):
             "total_dependencies": dependency_result["total_dependencies"],
             "manifests": dependency_result["manifests"],
             "dependencies": dependency_result["dependencies"]
+        },
+
+        "dependency_version_analysis": {
+            "status": "completed",
+            "total_checked": version_result["total_checked"],
+            "up_to_date": version_result["up_to_date"],
+            "outdated": version_result["outdated"],
+            "cannot_compare": version_result["cannot_compare"],
+            "newer_than_latest": version_result["newer_than_latest"],
+            "results": version_result["results"]
         }
     }
