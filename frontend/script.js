@@ -16,13 +16,13 @@ async function analyzeRepository() {
 
     analyzeBtn.disabled = true;
     analyzeBtn.textContent = "Analyzing...";
-    message.textContent = "Scanning repository files and folders...";
+    message.textContent = "Scanning repository and detecting languages...";
     message.style.color = "#60a5fa";
 
     results.innerHTML = `
         <div class="empty-state">
-            <h3>Scanning Repository...</h3>
-            <p>Discovering files and nested folders. Please wait.</p>
+            <h3>Analyzing Repository...</h3>
+            <p>Detecting files, folders and programming languages.</p>
         </div>
     `;
 
@@ -46,6 +46,7 @@ async function analyzeRepository() {
         const analysis = data.analysis;
         const files = analysis.files || [];
         const folders = analysis.folders || [];
+        const languages = analysis.language_distribution || [];
 
         document.getElementById("repoCount").textContent = "1";
         document.getElementById("fileCount").textContent =
@@ -53,15 +54,30 @@ async function analyzeRepository() {
         document.getElementById("issueCount").textContent = "0";
 
         const folderItems = folders.map(folder => `
-            <li>
-                📁 ${escapeHTML(folder)}
-            </li>
+            <li>📁 ${escapeHTML(folder)}</li>
         `).join("");
 
         const fileItems = files.map(file => `
             <li>
                 📄 ${escapeHTML(file.path)}
+                <span class="language-label">
+                    ${escapeHTML(file.language)}
+                </span>
             </li>
+        `).join("");
+
+        const languageItems = languages.map(language => `
+            <div class="language-card">
+                <div class="language-info">
+                    <strong>${escapeHTML(language.language)}</strong>
+                    <span>${language.files} files (${language.percentage}%)</span>
+                </div>
+                <div class="language-bar">
+                    <div class="language-progress"
+                         style="width: ${Math.min(100, Math.max(0, Number(language.percentage) || 0))}%">
+                    </div>
+                </div>
+            </div>
         `).join("");
 
         results.innerHTML = `
@@ -85,11 +101,18 @@ async function analyzeRepository() {
                 </p>
 
                 <div class="file-list">
+                    <h3>Programming Language Detection</h3>
+                    ${languageItems || "<p>No languages detected.</p>"}
+                </div>
+
+                <div class="file-list">
                     <h3>Repository Folders</h3>
                     <ul>
                         ${folderItems || "<li>No folders found.</li>"}
                     </ul>
+                </div>
 
+                <div class="file-list">
                     <h3>Repository Files</h3>
                     <ul>
                         ${fileItems || "<li>No files found.</li>"}
@@ -99,7 +122,7 @@ async function analyzeRepository() {
         `;
 
         message.textContent =
-            "Recursive repository scan completed successfully!";
+            "Repository scan and language detection completed successfully!";
         message.style.color = "#4ade80";
 
     } catch (error) {
