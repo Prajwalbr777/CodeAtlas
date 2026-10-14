@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CodeAtlas | AI Code Intelligence</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="app-container">
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <span>⌘</span> CodeAtlas
+            </div>
+
+            <nav>
+                <p class="nav-heading">WORKSPACE</p>
+                <a href="#" class="active">▦ Dashboard</a>
+                <a href="#">⌘ Repositories</a>
+                <a href="#">⌕ Code Analysis</a>
+                <a href="#">⚠ Issues</a>
+
+                <p class="nav-heading">SETTINGS</p>
+                <a href="#">⚙ Settings</a>
+            </nav>
+
+            <div class="sidebar-bottom">
+                <span class="status-dot"></span>
+                Backend Connected
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+
+            <header class="topbar">
+                <div>
+                    <h2>Dashboard</h2>
+                    <p>Welcome to your AI-powered code intelligence platform.</p>
+                </div>
+                <div class="profile">CA</div>
+            </header>
+
+            <!-- Repository Input -->
+            <section class="welcome-section">
+                <h1>Understand your codebase.</h1>
+                <p>Connect a GitHub repository and let CodeAtlas analyze your code.</p>
+
+                <div class="input-box">
+                    <input
+                        type="text"
+                        id="repoUrl"
+                        placeholder="https://github.com/owner/repository"
+                    >
+                    <button id="analyzeBtn" onclick="analyzeRepository()">
+                        Analyze Repository →
+                    </button>
+                </div>
+                <p id="message"></p>
+            </section>
+
+            <!-- Statistics -->
+            <section class="stats-grid">
+                <div class="stat-card">
+                    <p>Repositories Analyzed</p>
+                    <h2 id="repoCount">0</h2>
+                </div>
+
+                <div class="stat-card">
+                    <p>Files Discovered</p>
+                    <h2 id="fileCount">0</h2>
+                </div>
+
+                <div class="stat-card">
+                    <p>Issues Detected</p>
+                    <h2 id="issueCount">0</h2>
+                </div>
+            </section>
+
+            <!-- Results -->
+            <section class="results-section">
+                <div class="section-header">
+                    <h2>Repository Analysis</h2>
+                    <span class="live-label">● LIVE</span>
+                </div>
+
+                <div id="results">
+                    <div class="empty-state">
+                        <div class="empty-icon">⌘</div>
+                        <h3>No repository analyzed yet</h3>
+                        <p>Enter a GitHub URL above to get started.</p>
+                    </div>
+                </div>
+            </section>
+
+            <footer>
+                CodeAtlas © 2026 | AI-Powered Code Intelligence
+            </footer>
+
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
