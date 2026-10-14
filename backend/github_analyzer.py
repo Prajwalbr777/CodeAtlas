@@ -1,5 +1,11 @@
 import requests
 from collections import Counter
+from urllib.parse import urlparse
+
+
+# ============================================================
+# CODEATLAS - GITHUB REPOSITORY ANALYZER
+# ============================================================
 
 
 # Supported programming languages and file extensions
@@ -45,6 +51,15 @@ LANGUAGE_EXTENSIONS = {
 }
 
 
+# GitHub API configuration
+GITHUB_API_URL = "https://api.github.com"
+REQUEST_TIMEOUT = 30
+
+
+# ============================================================
+# LANGUAGE DETECTION
+# ============================================================
+
 def detect_language(filename):
     filename = filename.lower()
 
@@ -55,63 +70,128 @@ def detect_language(filename):
     return "Other"
 
 
-def analyze_github_repository(repo_url):
-    try:
-        parts = repo_url.rstrip("/").split("/")
+# ============================================================
+# REPOSITORY URL VALIDATION
+# ============================================================
 
-        owner = parts[-2]
-        repo = parts[-1].replace(".git", "")
+def extract_repository_details(repo_url):
+    parsed_url = urlparse(repo_url.strip())
+
+    if (
+        parsed_url.scheme not in ["http", "https"]
+        or parsed_url.netloc.lower() not in [
+            "github.com",
+            "www.github.com"
+        ]
+    ):
+        raise ValueError("Invalid GitHub repository URL")
+
+    parts = [
+        part for part in parsed_url.path.strip("/").split("/")
+        if part
+    ]
+
+    if len(parts) != 2:
+        raise ValueError("Please provide a valid GitHub repository URL")
+
+    owner = parts[0]
+    repo = parts[1]
+
+    if repo.endswith(".git"):
+        repo = repo[:-4]
+
+    return owner, repo
+
+
+# ============================================================
+# GITHUB REPOSITORY ANALYSIS
+# ============================================================
+
+def analyze_github_repository(repo_url):
+
+    try:
+
+        # Extract owner and repository name
+        owner, repo = extract_repository_details(repo_url)
 
         api_url = (
-            f"https://api.github.com/repos/"
+            f"{GITHUB_API_URL}/repos/"
             f"{owner}/{repo}/git/trees/HEAD?recursive=1"
         )
 
-        response = requests.get(api_url, timeout=30)
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "CodeAtlas-Repository-Analyzer"
+        }
 
+        response = requests.get(
+            api_url,
+            headers=headers,
+            timeout=REQUEST_TIMEOUT
+        )
+
+        # Handle GitHub API errors
         if response.status_code != 200:
+
             return {
                 "error": "Unable to access repository",
                 "status_code": response.status_code
             }
 
         data = response.json()
+
         tree = data.get("tree", [])
 
         files = []
         folders = set()
+
         language_counts = Counter()
 
+        # Check every repository item
         for item in tree:
+
             path = item.get("path", "")
             item_type = item.get("type", "")
 
             if item_type == "blob":
+
                 filename = path.split("/")[-1]
+
                 language = detect_language(filename)
 
+                # Store file information, including size
                 files.append({
                     "name": filename,
                     "path": path,
                     "type": "file",
-                    "language": language
+                    "language": language,
+                    "size": item.get("size", 0)
                 })
 
                 language_counts[language] += 1
 
+                # Detect parent folders
                 path_parts = path.split("/")
 
                 for index in range(1, len(path_parts)):
-                    folders.add("/".join(path_parts[:index]))
+                    folders.add(
+                        "/".join(path_parts[:index])
+                    )
 
             elif item_type == "tree":
+
                 folders.add(path)
+
+        # ====================================================
+        # LANGUAGE DISTRIBUTION
+        # ====================================================
 
         total_files = len(files)
 
         language_distribution = []
 
         for language, count in language_counts.most_common():
+
             percentage = (
                 round((count / total_files) * 100, 2)
                 if total_files > 0 else 0
@@ -123,6 +203,10 @@ def analyze_github_repository(repo_url):
                 "percentage": percentage
             })
 
+        # ====================================================
+        # FINAL RESULT
+        # ====================================================
+
         return {
             "repository": repo,
             "owner": owner,
@@ -133,8 +217,30 @@ def analyze_github_repository(repo_url):
             "language_distribution": language_distribution
         }
 
-    except requests.RequestException as error:
-        return {"error": str(error)}
+    except ValueError as error:
 
-    except (IndexError, ValueError):
-        return {"error": "Invalid GitHub repository URL"}
+        return {
+            "error": str(error),
+            "status_code": 400
+        }
+
+    except requests.Timeout:
+
+        return {
+            "error": "GitHub request timed out. Please try again.",
+            "status_code": 504
+        }
+
+    except requests.RequestException as error:
+
+        return {
+            "error": f"GitHub connection error: {str(error)}",
+            "status_code": 502
+        }
+
+    except (IndexError, KeyError, TypeError, ValueError) as error:
+
+        return {
+            "error": f"Repository analysis failed: {str(error)}",
+            "status_code": 500
+        }
