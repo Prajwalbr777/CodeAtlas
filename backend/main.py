@@ -4,17 +4,20 @@ from pydantic import BaseModel
 from urllib.parse import urlparse
 
 from backend.github_analyzer import analyze_github_repository
-
 from backend.github_source_fetcher import fetch_source_files
-
 from backend.code_quality_scanner import analyze_source_files
+from backend.ecosystem_scanner import detect_ecosystems
+from backend.dependency_analyzer import analyze_dependencies
 
 
 # Create FastAPI application
 app = FastAPI(
     title="CodeAtlas API",
-    description="Codebase intelligence and code quality analysis platform",
-    version="1.1.0"
+    description=(
+        "Codebase intelligence, ecosystem detection, "
+        "code quality and dependency analysis platform"
+    ),
+    version="1.3.0"
 )
 
 
@@ -65,6 +68,10 @@ def analyze_repository(request: RepositoryRequest):
             "github.com",
             "www.github.com"
         ]
+        or len([
+            part for part in parsed_url.path.strip("/").split("/")
+            if part
+        ]) != 2
     ):
         raise HTTPException(
             status_code=400,
@@ -82,7 +89,10 @@ def analyze_repository(request: RepositoryRequest):
             detail=result["error"]
         )
 
-    # Step 2: Fetch actual source code from GitHub
+    # Step 2: Detect technology ecosystems
+    ecosystem_result = detect_ecosystems(result["files"])
+
+    # Step 3: Fetch source files and dependency manifests
     source_result = fetch_source_files(
         result["owner"],
         result["repository"],
@@ -96,15 +106,28 @@ def analyze_repository(request: RepositoryRequest):
         )
 
     source_files = source_result["files"]
+    manifest_files = source_result["manifest_files"]
 
-    # Step 3: Scan source code for potential issues
+    # Step 4: Scan source code for potential issues
     quality_result = analyze_source_files(source_files)
 
-    # Step 4: Prepare combined analysis response
+    # Step 5: Analyze declared dependencies
+    dependency_result = analyze_dependencies(manifest_files)
+
+    # Step 6: Prepare combined analysis response
     return {
-        "message": "Repository and code quality analysis completed successfully",
+        "message": (
+            "Repository, ecosystem, code quality and "
+            "dependency analysis completed successfully"
+        ),
 
         "analysis": result,
+
+        "ecosystem_analysis": {
+            "status": "completed",
+            "total_ecosystems": ecosystem_result["total_ecosystems"],
+            "ecosystems": ecosystem_result["ecosystems"]
+        },
 
         "code_quality": {
             "status": "completed",
@@ -114,5 +137,15 @@ def analyze_repository(request: RepositoryRequest):
             "skipped_files": source_result["skipped_files"],
             "summary": quality_result["summary"],
             "issues": quality_result["issues"]
+        },
+
+        "dependency_analysis": {
+            "status": "completed",
+            "scanned_manifests": len(manifest_files),
+            "skipped_manifests": source_result["skipped_manifests"],
+            "total_manifests": dependency_result["total_manifests"],
+            "total_dependencies": dependency_result["total_dependencies"],
+            "manifests": dependency_result["manifests"],
+            "dependencies": dependency_result["dependencies"]
         }
     }
