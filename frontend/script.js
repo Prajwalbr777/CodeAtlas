@@ -22,7 +22,7 @@ async function analyzeRepository() {
     analyzeBtn.textContent = "Analyzing...";
 
     message.textContent =
-        "Scanning repository, ecosystems, code quality and dependencies...";
+        "Scanning repository, code quality, dependencies and security...";
 
     message.style.color = "#60a5fa";
 
@@ -72,6 +72,10 @@ async function analyzeRepository() {
         const dependencyAnalysis = data.dependency_analysis || {};
         const manifests = dependencyAnalysis.manifests || [];
         const dependencies = dependencyAnalysis.dependencies || [];
+
+        // Vulnerability analysis returned by the OSV scanner
+        const vulnerabilityAnalysis = data.vulnerability_analysis || {};
+        const vulnerabilityResults = vulnerabilityAnalysis.results || [];
 
         // ==========================================
         // UPDATE DASHBOARD STATISTICS
@@ -386,22 +390,11 @@ async function analyzeRepository() {
                         background: #1f2937;
                     ">
 
-                    <h4 style="margin-bottom: 12px;">
-                        📦 ${escapeHTML(manifest.manifest_file)}
-                    </h4>
+                    <h4>${escapeHTML(manifest.manifest_file)}</h4>
 
-                    <p style="
-                        color: #9ca3af;
-                        margin-bottom: 12px;
-                    ">
+                    <p style="margin-top: 8px;">
                         Dependencies found:
-
-                        <strong style="color: #4ade80;">
-                            ${escapeHTML(
-                                manifest.dependency_count ??
-                                manifestDependencies.length
-                            )}
-                        </strong>
+                        ${escapeHTML(manifest.dependency_count ?? manifestDependencies.length)}
                     </p>
 
                     ${dependencyTableHTML}
@@ -410,392 +403,554 @@ async function analyzeRepository() {
             `;
         }).join("");
 
-        // ==========================================
-        // COMPLETE DEPENDENCY LIST
+                // ==========================================
+        // DEPENDENCY VERSION ANALYSIS
         // ==========================================
 
-        const allDependencyItems =
-            dependencies.map(dependency => {
+        const versionAnalysis =
+            data.dependency_version_analysis || {};
+
+        const versionResults =
+            versionAnalysis.results || [];
+
+        const versionCards = versionResults.map(item => {
+
+            const status = String(
+                item.status || "Unknown"
+            );
+
+            let statusColor = "#9ca3af";
+
+            if (status.toLowerCase().includes("outdated")) {
+                statusColor = "#fbbf24";
+            } else if (
+                status.toLowerCase().includes("up to date")
+            ) {
+                statusColor = "#4ade80";
+            }
+
+            return `
+                <div style="
+                    background: #1f2937;
+                    border: 1px solid #374151;
+                    border-left: 4px solid ${statusColor};
+                    border-radius: 8px;
+                    padding: 14px;
+                    margin-bottom: 10px;
+                ">
+
+                    <div style="
+                        display: flex;
+                        justify-content: space-between;
+                        gap: 10px;
+                        flex-wrap: wrap;
+                    ">
+
+                        <strong>
+                            ${escapeHTML(item.name)}
+                        </strong>
+
+                        <span style="
+                            color: ${statusColor};
+                            font-weight: bold;
+                        ">
+                            ${escapeHTML(status)}
+                        </span>
+
+                    </div>
+
+                    <p style="margin-top: 8px;">
+                        Declared version:
+                        ${escapeHTML(item.declared_version || "Not specified")}
+                    </p>
+
+                    <p>
+                        Latest version:
+                        ${escapeHTML(item.latest_version || "Not available")}
+                    </p>
+
+                    <p style="
+                        color: #9ca3af;
+                        font-size: 12px;
+                        margin-top: 6px;
+                    ">
+                        Ecosystem:
+                        ${escapeHTML(item.ecosystem || "Unknown")}
+                    </p>
+
+                </div>
+            `;
+        }).join("");
+
+        const versionSummaryHTML = `
+            <div style="
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+                gap: 12px;
+                margin-bottom: 18px;
+            ">
+
+                <div class="stat-card">
+                    <h3>${escapeHTML(versionAnalysis.total_checked ?? 0)}</h3>
+                    <p>Checked</p>
+                </div>
+
+                <div class="stat-card">
+                    <h3>${escapeHTML(versionAnalysis.up_to_date ?? 0)}</h3>
+                    <p>Up to Date</p>
+                </div>
+
+                <div class="stat-card">
+                    <h3>${escapeHTML(versionAnalysis.outdated ?? 0)}</h3>
+                    <p>Outdated</p>
+                </div>
+
+                <div class="stat-card">
+                    <h3>${escapeHTML(versionAnalysis.cannot_compare ?? 0)}</h3>
+                    <p>Cannot Compare</p>
+                </div>
+
+            </div>
+        `;
+
+        // ==========================================
+        // VULNERABILITY ANALYSIS SUMMARY
+        // ==========================================
+
+        const vulnerabilitySummaryHTML = `
+            <div style="
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+                gap: 12px;
+                margin-bottom: 18px;
+            ">
+
+                <div class="stat-card">
+                    <h3>
+                        ${escapeHTML(
+                            vulnerabilityAnalysis.total_dependencies ?? 0
+                        )}
+                    </h3>
+                    <p>Total Dependencies</p>
+                </div>
+
+                <div class="stat-card">
+                    <h3>
+                        ${escapeHTML(
+                            vulnerabilityAnalysis.checked_dependencies ?? 0
+                        )}
+                    </h3>
+                    <p>Checked</p>
+                </div>
+
+                <div class="stat-card">
+                    <h3 style="color: #f87171;">
+                        ${escapeHTML(
+                            vulnerabilityAnalysis.vulnerable_dependencies ?? 0
+                        )}
+                    </h3>
+                    <p>Vulnerable</p>
+                </div>
+
+                <div class="stat-card">
+                    <h3 style="color: #4ade80;">
+                        ${escapeHTML(
+                            vulnerabilityAnalysis.no_known_vulnerabilities ?? 0
+                        )}
+                    </h3>
+                    <p>No Known Issues</p>
+                </div>
+
+                <div class="stat-card">
+                    <h3>
+                        ${escapeHTML(
+                            vulnerabilityAnalysis.cannot_check ?? 0
+                        )}
+                    </h3>
+                    <p>Cannot Check</p>
+                </div>
+
+                <div class="stat-card">
+                    <h3>
+                        ${escapeHTML(
+                            vulnerabilityAnalysis.check_failed ?? 0
+                        )}
+                    </h3>
+                    <p>Check Failed</p>
+                </div>
+
+            </div>
+        `;
+
+        // ==========================================
+        // VULNERABILITY DETAILS
+        // ==========================================
+
+        const vulnerabilityCards = vulnerabilityResults.map(item => {
+
+            const isVulnerable =
+                item.status === "Vulnerable";
+
+            const isSafe =
+                item.status === "No known vulnerabilities found";
+
+            const statusColor = isVulnerable
+                ? "#f87171"
+                : isSafe
+                    ? "#4ade80"
+                    : "#fbbf24";
+
+            const vulnerabilityDetails =
+                item.vulnerabilities || [];
+
+            const detailCards = vulnerabilityDetails.map(vulnerability => {
+
+                const aliases =
+                    vulnerability.aliases || [];
+
+                const references =
+                    vulnerability.references || [];
+
+                const aliasHTML = aliases.length
+                    ? `<p style="margin-top: 8px;">
+                        <strong>Aliases:</strong>
+                        ${escapeHTML(aliases.join(", "))}
+                       </p>`
+                    : "";
+
+                const referenceHTML = references.length
+                    ? `
+                        <div style="margin-top: 8px;">
+                            <strong>References:</strong>
+                            <ul style="padding-left: 20px;">
+                                ${references.slice(0, 5).map(reference => `
+                                    <li>
+                                        <a
+                                            href="${escapeHTML(reference)}"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            style="color: #60a5fa;"
+                                        >
+                                            ${escapeHTML(reference)}
+                                        </a>
+                                    </li>
+                                `).join("")}
+                            </ul>
+                        </div>
+                    `
+                    : "";
 
                 return `
-                    <tr>
+                    <div style="
+                        background: #111827;
+                        border: 1px solid #374151;
+                        padding: 12px;
+                        margin-top: 10px;
+                        border-radius: 6px;
+                    ">
 
-                        <td style="
-                            padding: 10px;
-                            border-bottom: 1px solid #374151;
-                        ">
-                            ${escapeHTML(dependency.name)}
-                        </td>
+                        <strong style="color: #fca5a5;">
+                            ${escapeHTML(vulnerability.id || "Unknown ID")}
+                        </strong>
 
-                        <td style="
-                            padding: 10px;
-                            border-bottom: 1px solid #374151;
-                        ">
+                        <p style="margin-top: 8px;">
                             ${escapeHTML(
-                                dependency.version || "Not specified"
+                                vulnerability.summary ||
+                                "No summary available."
                             )}
-                        </td>
+                        </p>
 
-                        <td style="
-                            padding: 10px;
-                            border-bottom: 1px solid #374151;
-                        ">
-                            ${escapeHTML(
-                                dependency.manifest_file || "Unknown"
-                            )}
-                        </td>
+                        ${vulnerability.severity ? `
+                            <p style="margin-top: 8px;">
+                                <strong>Severity:</strong>
+                                ${escapeHTML(vulnerability.severity)}
+                            </p>
+                        ` : ""}
 
-                    </tr>
+                        ${aliasHTML}
+
+                        ${referenceHTML}
+
+                    </div>
                 `;
             }).join("");
 
-        let completeDependencyHTML;
+            return `
+                <div style="
+                    background: #1f2937;
+                    border: 1px solid #374151;
+                    border-left: 4px solid ${statusColor};
+                    padding: 15px;
+                    margin-bottom: 14px;
+                    border-radius: 8px;
+                ">
 
-        if (allDependencyItems) {
-            completeDependencyHTML = `
-                <div style="overflow-x: auto;">
-
-                    <table style="
-                        width: 100%;
-                        border-collapse: collapse;
-                        text-align: left;
+                    <div style="
+                        display: flex;
+                        justify-content: space-between;
+                        gap: 10px;
+                        flex-wrap: wrap;
                     ">
 
-                        <thead>
-                            <tr style="background: #111827;">
-                                <th style="padding: 10px;">
-                                    Dependency
-                                </th>
+                        <strong style="font-size: 16px;">
+                            ${escapeHTML(item.name || "Unknown Package")}
+                        </strong>
 
-                                <th style="padding: 10px;">
-                                    Declared Version
-                                </th>
+                        <span style="
+                            color: ${statusColor};
+                            font-weight: bold;
+                        ">
+                            ${escapeHTML(item.status || "Unknown")}
+                        </span>
 
-                                <th style="padding: 10px;">
-                                    Manifest File
-                                </th>
-                            </tr>
-                        </thead>
+                    </div>
 
-                        <tbody>
-                            ${allDependencyItems}
-                        </tbody>
+                    <p style="margin-top: 10px;">
+                        <strong>Version:</strong>
+                        ${escapeHTML(item.declared_version || "Not specified")}
+                    </p>
 
-                    </table>
+                    <p>
+                        <strong>Ecosystem:</strong>
+                        ${escapeHTML(item.ecosystem || "Unknown")}
+                    </p>
+
+                    <p>
+                        <strong>Vulnerability Count:</strong>
+                        ${escapeHTML(item.vulnerability_count ?? vulnerabilityDetails.length)}
+                    </p>
+
+                    ${
+                        detailCards ||
+                        `<p style="
+                            color: #9ca3af;
+                            margin-top: 10px;
+                        ">
+                            ${
+                                isSafe
+                                    ? "No known vulnerabilities were found for this checked version."
+                                    : "No additional vulnerability details are available."
+                            }
+                        </p>`
+                    }
 
                 </div>
             `;
-        } else {
-            completeDependencyHTML = `
-                <p>No dependencies were extracted.</p>
-            `;
-        }
+        }).join("");
 
-        // ==========================================
-        // DEPENDENCY ANALYSIS SUMMARY
-        // ==========================================
-
-        const dependencyManifestHTML =
-            manifestItems ||
-            "<p>No supported dependency manifests were found.</p>";
-
-        const dependencySummaryHTML = `
-            <div style="
-                display: flex;
-                gap: 12px;
-                flex-wrap: wrap;
-                margin: 15px 0;
-            ">
-
-                <div style="
-                    background: #123047;
-                    padding: 14px;
-                    border-radius: 8px;
-                ">
-                    <strong style="color: #38bdf8;">
-                        Manifests Scanned
-                    </strong>
-
-                    <h2>
-                        ${escapeHTML(
-                            dependencyAnalysis.scanned_manifests ?? 0
-                        )}
-                    </h2>
-                </div>
-
-                <div style="
-                    background: #123b2d;
-                    padding: 14px;
-                    border-radius: 8px;
-                ">
-                    <strong style="color: #4ade80;">
-                        Total Dependencies
-                    </strong>
-
-                    <h2>
-                        ${escapeHTML(
-                            dependencyAnalysis.total_dependencies ?? 0
-                        )}
-                    </h2>
-                </div>
-
-                <div style="
-                    background: #3d321b;
-                    padding: 14px;
-                    border-radius: 8px;
-                ">
-                    <strong style="color: #fbbf24;">
-                        Skipped Manifests
-                    </strong>
-
-                    <h2>
-                        ${escapeHTML(
-                            dependencyAnalysis.skipped_manifests ?? 0
-                        )}
-                    </h2>
-                </div>
-
-            </div>
-        `;
-
-        // ==========================================
-        // CODE QUALITY SUMMARY
-        // ==========================================
-
-        const qualitySummaryHTML = `
-            <div style="
-                display: flex;
-                gap: 12px;
-                flex-wrap: wrap;
-                margin: 15px 0;
-            ">
-
-                <div style="
-                    background: #3b1f27;
-                    padding: 12px;
-                    border-radius: 8px;
-                ">
-                    <strong style="color: #f87171;">
-                        High
-                    </strong>
-
-                    <h2>${escapeHTML(summary.high ?? 0)}</h2>
-                </div>
-
-                <div style="
-                    background: #3d321b;
-                    padding: 12px;
-                    border-radius: 8px;
-                ">
-                    <strong style="color: #fbbf24;">
-                        Medium
-                    </strong>
-
-                    <h2>${escapeHTML(summary.medium ?? 0)}</h2>
-                </div>
-
-                <div style="
-                    background: #1e344b;
-                    padding: 12px;
-                    border-radius: 8px;
-                ">
-                    <strong style="color: #60a5fa;">
-                        Low
-                    </strong>
-
-                    <h2>${escapeHTML(summary.low ?? 0)}</h2>
-                </div>
-
-            </div>
-        `;
-
-        const issueHTML =
-            issueItems ||
-            `
-                <p>
-                    No potential issues were detected
-                    by the current scanning rules.
-                </p>
-            `;
-
-        // ==========================================
-        // FINAL DASHBOARD HTML
+                // ==========================================
+        // FINAL DASHBOARD DISPLAY
         // ==========================================
 
         results.innerHTML = `
 
-    <div class="repo-details">
+            <div class="dashboard-section">
 
-        <h3>Repository Analysis Successful!</h3>
+                <h2>Repository Overview</h2>
 
-        <p>
-            <strong>Repository:</strong>
-            ${escapeHTML(analysis.repository)}
-        </p>
+                <div class="stats-grid">
 
-        <p>
-            <strong>Owner:</strong>
-            ${escapeHTML(analysis.owner)}
-        </p>
+                    <div class="stat-card">
+                        <h3>${escapeHTML(analysis.total_files ?? files.length)}</h3>
+                        <p>Total Files</p>
+                    </div>
 
-        <p>
-            <strong>Total Files:</strong>
-            ${escapeHTML(analysis.total_files)}
-        </p>
+                    <div class="stat-card">
+                        <h3>${escapeHTML(analysis.total_folders ?? folders.length)}</h3>
+                        <p>Total Folders</p>
+                    </div>
 
-        <p>
-            <strong>Total Folders:</strong>
-            ${escapeHTML(analysis.total_folders)}
-        </p>
+                    <div class="stat-card">
+                        <h3>${escapeHTML(summary.total_issues ?? issues.length)}</h3>
+                        <p>Code Issues</p>
+                    </div>
 
-        <!-- PROGRAMMING LANGUAGES -->
+                    <div class="stat-card">
+                        <h3>${escapeHTML(dependencyAnalysis.total_dependencies ?? dependencies.length)}</h3>
+                        <p>Dependencies</p>
+                    </div>
 
-        <div class="file-list">
+                </div>
 
-            <h3>Programming Language Detection</h3>
+            </div>
 
-            ${languageItems || "<p>No languages detected.</p>"}
+            <div class="dashboard-section">
 
-        </div>
+                <h2>Programming Languages</h2>
 
-        <!-- ECOSYSTEM ANALYSIS -->
+                ${
+                    languageItems ||
+                    "<p>No programming languages detected.</p>"
+                }
 
-        <div class="file-list">
+            </div>
 
-            <h3>Technology Ecosystem Analysis</h3>
+            <div class="dashboard-section">
 
-            <p>
-                <strong>Total Ecosystems Detected:</strong>
-                ${escapeHTML(
-                    ecosystemAnalysis.total_ecosystems ?? 0
-                )}
-            </p>
+                <h2>Technology Ecosystems</h2>
 
-            ${ecosystemItems ||
-                "<p>No technology ecosystems were detected.</p>"}
+                ${
+                    ecosystemItems ||
+                    "<p>No technology ecosystems detected.</p>"
+                }
 
-        </div>
+            </div>
 
-        <!-- DEPENDENCY ANALYSIS -->
+            <div class="dashboard-section">
 
-        <div class="file-list">
+                <h2>Code Quality Analysis</h2>
 
-            <h3>Dependency Analysis</h3>
+                <div class="stats-grid">
 
-            ${dependencySummaryHTML}
+                    <div class="stat-card">
+                        <h3>${escapeHTML(summary.total_issues ?? issues.length)}</h3>
+                        <p>Total Issues</p>
+                    </div>
 
-            <h3>Dependency Manifest Files</h3>
+                    <div class="stat-card">
+                        <h3>${escapeHTML(summary.high ?? 0)}</h3>
+                        <p>High Severity</p>
+                    </div>
 
-            ${dependencyManifestHTML}
+                    <div class="stat-card">
+                        <h3>${escapeHTML(summary.medium ?? 0)}</h3>
+                        <p>Medium Severity</p>
+                    </div>
 
-            <h3 style="margin-top: 20px;">
-                Complete Dependency List
-            </h3>
+                    <div class="stat-card">
+                        <h3>${escapeHTML(summary.low ?? 0)}</h3>
+                        <p>Low Severity</p>
+                    </div>
 
-            ${completeDependencyHTML}
+                </div>
 
-            <p style="
-                margin-top: 15px;
-                color: #9ca3af;
-                font-size: 13px;
-            ">
-                Note: This analysis extracts declared dependencies
-                and their version requirements. It does not yet
-                verify the latest versions or known vulnerabilities.
-            </p>
+                ${
+                    issueItems ||
+                    "<p>No code quality issues detected by the current scanner.</p>"
+                }
 
-        </div>
+            </div>
 
-        <!-- CODE QUALITY ANALYSIS -->
+            <div class="dashboard-section">
 
-        <div class="file-list">
+                <h2>Dependency Manifest Analysis</h2>
 
-            <h3>Code Quality Analysis</h3>
+                <p style="color: #9ca3af; margin-bottom: 15px;">
+                    Detected dependency manifest files and their declared packages.
+                </p>
 
-            <p>
-                <strong>Source Files Scanned:</strong>
-                ${escapeHTML(quality.scanned_source_files ?? 0)}
-            </p>
+                ${
+                    manifestItems ||
+                    "<p>No dependency manifest files detected.</p>"
+                }
 
-            <p>
-                <strong>Files Skipped:</strong>
-                ${escapeHTML(quality.skipped_files ?? 0)}
-            </p>
+            </div>
 
-            <p>
-                <strong>Total Potential Issues:</strong>
-                ${escapeHTML(
-                    summary.total_issues ?? issues.length
-                )}
-            </p>
+            <div class="dashboard-section">
 
-            ${qualitySummaryHTML}
+                <h2>Dependency Version Analysis</h2>
 
-            <h3>Detected Issues</h3>
+                ${versionSummaryHTML}
 
-            ${issueHTML}
+                ${
+                    versionCards ||
+                    "<p>No dependency version results available.</p>"
+                }
 
-        </div>
+                <p style="
+                    color: #9ca3af;
+                    font-size: 12px;
+                    margin-top: 12px;
+                ">
+                    Version checks currently support Python and JavaScript packages
+                    with exact versions. Version ranges and unsupported ecosystems
+                    may not be compared.
+                </p>
 
-        <!-- REPOSITORY FOLDERS -->
+            </div>
 
-        <div class="file-list">
+            <div class="dashboard-section">
 
-            <h3>Repository Folders</h3>
+                <h2>Security Vulnerability Analysis</h2>
 
-            <ul>
-                ${folderItems || "<li>No folders found.</li>"}
-            </ul>
+                <p style="color: #9ca3af; margin-bottom: 15px;">
+                    Security checks are performed using the OSV vulnerability database.
+                </p>
 
-        </div>
+                ${vulnerabilitySummaryHTML}
 
-        <!-- REPOSITORY FILES -->
+                ${
+                    vulnerabilityCards ||
+                    "<p>No vulnerability scan results are available.</p>"
+                }
 
-        <div class="file-list">
+                <p style="
+                    color: #9ca3af;
+                    font-size: 12px;
+                    margin-top: 12px;
+                ">
+                    This scanner checks supported dependencies with exact versions.
+                    No known vulnerabilities found does not guarantee that a package
+                    is completely secure.
+                </p>
 
-            <h3>Repository Files</h3>
+            </div>
 
-            <ul>
-                ${fileItems || "<li>No files found.</li>"}
-            </ul>
+            <div class="dashboard-section">
 
-        </div>
+                <h2>Repository Folders</h2>
 
-    </div>
-`;
+                <ul>
+                    ${
+                        folderItems ||
+                        "<li>No folders found.</li>"
+                    }
+                </ul>
 
-// ==========================================
-// SUCCESS MESSAGE
-// ==========================================
+            </div>
 
-message.textContent =
-    "Repository, ecosystem, code quality and dependency analysis completed successfully!";
+            <div class="dashboard-section">
 
-message.style.color = "#4ade80";
+                <h2>Repository Files</h2>
 
-} catch (error) {
+                <ul>
+                    ${
+                        fileItems ||
+                        "<li>No files found.</li>"
+                    }
+                </ul>
 
-    // ERROR HANDLING
+            </div>
 
-    message.textContent = error.message;
-    message.style.color = "#f87171";
+        `;
 
-    results.innerHTML = `
-        <div class="empty-state">
-            <h3>Analysis Failed</h3>
-            <p>${escapeHTML(error.message)}</p>
-        </div>
-    `;
+        message.textContent =
+            "Repository analysis completed successfully!";
 
-} finally {
+        message.style.color = "#4ade80";
 
-    // RESTORE ANALYZE BUTTON
+    } catch (error) {
 
-    analyzeBtn.disabled = false;
-    analyzeBtn.textContent = "Analyze Repository →";
+        console.error("CodeAtlas Error:", error);
 
-}
+        message.textContent =
+            "Analysis failed: " + error.message;
 
+        message.style.color = "#f87171";
+
+        results.innerHTML = `
+            <div class="empty-state">
+                <h3>Analysis Failed</h3>
+                <p>${escapeHTML(error.message)}</p>
+            </div>
+        `;
+
+    } finally {
+
+        analyzeBtn.disabled = false;
+        analyzeBtn.textContent = "Analyze Repository";
+
+    }
 }
 
 
@@ -805,14 +960,18 @@ message.style.color = "#4ade80";
 
 function escapeHTML(value) {
 
-    return String(value ?? "").replace(/[&<>"']/g, character => {
+    if (value === null || value === undefined) {
+        return "";
+    }
+
+    return String(value).replace(/[&<>"']/g, character => {
 
         const entities = {
             "&": "&amp;",
             "<": "&lt;",
             ">": "&gt;",
             '"': "&quot;",
-            "'": "&#39;"
+            "'": "&#039;"
         };
 
         return entities[character];
@@ -820,4 +979,3 @@ function escapeHTML(value) {
     });
 
 }
-            

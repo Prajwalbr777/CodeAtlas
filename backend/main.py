@@ -1,3 +1,4 @@
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -9,6 +10,7 @@ from backend.code_quality_scanner import analyze_source_files
 from backend.ecosystem_scanner import detect_ecosystems
 from backend.dependency_analyzer import analyze_dependencies
 from backend.dependency_version_checker import check_dependency_versions
+from backend.vulnerability_scanner import scan_vulnerabilities
 
 
 # Create FastAPI application
@@ -16,10 +18,10 @@ app = FastAPI(
     title="CodeAtlas API",
     description=(
         "Codebase intelligence, ecosystem detection, "
-        "code quality, dependency analysis and "
-        "dependency version checking platform"
+        "code quality, dependency analysis, version checking "
+        "and vulnerability detection platform"
     ),
-    version="1.4.0"
+    version="1.5.0"
 )
 
 
@@ -44,7 +46,7 @@ def home():
     return {
         "message": "Welcome to CodeAtlas!",
         "status": "Backend is running successfully",
-        "version": "1.4.0"
+        "version": "1.5.0"
     }
 
 
@@ -122,11 +124,16 @@ def analyze_repository(request: RepositoryRequest):
         dependency_result["dependencies"]
     )
 
-    # Step 7: Prepare combined analysis response
+    # Step 7: Detect known dependency vulnerabilities
+    vulnerability_result = scan_vulnerabilities(
+        dependency_result["dependencies"]
+    )
+
+    # Step 8: Prepare combined analysis response
     return {
         "message": (
-            "Repository, ecosystem, code quality, dependency "
-            "and dependency version analysis completed successfully"
+            "Repository, ecosystem, code quality, dependency, "
+            "version and vulnerability analysis completed successfully"
         ),
 
         "analysis": result,
@@ -165,5 +172,24 @@ def analyze_repository(request: RepositoryRequest):
             "cannot_compare": version_result["cannot_compare"],
             "newer_than_latest": version_result["newer_than_latest"],
             "results": version_result["results"]
+        },
+
+        "vulnerability_analysis": {
+            "status": "completed",
+            "total_dependencies": vulnerability_result[
+                "total_dependencies"
+            ],
+            "checked_dependencies": vulnerability_result[
+                "checked_dependencies"
+            ],
+            "vulnerable_dependencies": vulnerability_result[
+                "vulnerable_dependencies"
+            ],
+            "no_known_vulnerabilities": vulnerability_result[
+                "no_known_vulnerabilities"
+            ],
+            "cannot_check": vulnerability_result["cannot_check"],
+            "check_failed": vulnerability_result["check_failed"],
+            "results": vulnerability_result["results"]
         }
     }
