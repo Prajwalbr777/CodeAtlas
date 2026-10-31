@@ -1,3 +1,4 @@
+
 const API_URL = "http://127.0.0.1:8000";
 let lastAnalysisData = null;
 
@@ -49,11 +50,12 @@ async function analyzeRepository() {
 
         if (!response.ok) {
             throw new Error(
-                data.detail || "Repository analysis failed."
+                typeof data.detail === "string"
+                    ? data.detail
+                    : JSON.stringify(data.detail || "Repository analysis failed.")
             );
         }
 
-        // Save complete analysis data for PDF generation.
         lastAnalysisData = data;
 
         // ==========================================
@@ -127,7 +129,6 @@ async function analyzeRepository() {
 
             return `
                 <div class="language-card">
-
                     <div class="language-info">
                         <strong>${escapeHTML(language.language)}</strong>
 
@@ -143,7 +144,6 @@ async function analyzeRepository() {
                             style="width: ${percentage}%">
                         </div>
                     </div>
-
                 </div>
             `;
         }).join("");
@@ -193,7 +193,6 @@ async function analyzeRepository() {
                         ">
                             DETECTED
                         </span>
-
                     </div>
 
                     <p style="margin-top: 12px;">
@@ -212,7 +211,6 @@ async function analyzeRepository() {
                             ${ecosystemManifestHTML}
                         </ul>
                     </div>
-
                 </div>
             `;
         }).join("");
@@ -269,7 +267,6 @@ async function analyzeRepository() {
                         ">
                             ${escapeHTML(severity)}
                         </span>
-
                     </div>
 
                     <p style="margin-top: 10px;">
@@ -337,7 +334,6 @@ async function analyzeRepository() {
                             line-height: 1.6;
                         "
                     ></div>
-
                 </div>
             `;
         }).join("");
@@ -356,7 +352,6 @@ async function analyzeRepository() {
 
                     return `
                         <tr>
-
                             <td style="
                                 padding: 10px;
                                 border-bottom: 1px solid #374151;
@@ -372,7 +367,6 @@ async function analyzeRepository() {
                                     dependency.version || "Not specified"
                                 )}
                             </td>
-
                         </tr>
                     `;
                 }).join("");
@@ -382,13 +376,11 @@ async function analyzeRepository() {
             if (dependencyRows) {
                 dependencyTableHTML = `
                     <div style="overflow-x: auto;">
-
                         <table style="
                             width: 100%;
                             border-collapse: collapse;
                             text-align: left;
                         ">
-
                             <thead>
                                 <tr style="background: #111827;">
                                     <th style="padding: 10px;">
@@ -404,9 +396,7 @@ async function analyzeRepository() {
                             <tbody>
                                 ${dependencyRows}
                             </tbody>
-
                         </table>
-
                     </div>
                 `;
             } else {
@@ -436,11 +426,11 @@ async function analyzeRepository() {
                     </p>
 
                     ${dependencyTableHTML}
-
                 </div>
             `;
         }).join("");
-                // ==========================================
+        
+        // ==========================================
         // DEPENDENCY VERSION ANALYSIS
         // ==========================================
 
@@ -482,7 +472,6 @@ async function analyzeRepository() {
                         gap: 10px;
                         flex-wrap: wrap;
                     ">
-
                         <strong>
                             ${escapeHTML(item.name)}
                         </strong>
@@ -493,7 +482,6 @@ async function analyzeRepository() {
                         ">
                             ${escapeHTML(status)}
                         </span>
-
                     </div>
 
                     <p style="margin-top: 8px;">
@@ -549,7 +537,6 @@ async function analyzeRepository() {
 
             </div>
         `;
-
 
         // ==========================================
         // VULNERABILITY ANALYSIS SUMMARY
@@ -619,7 +606,6 @@ async function analyzeRepository() {
 
             </div>
         `;
-
 
         // ==========================================
         // VULNERABILITY DETAILS
@@ -779,7 +765,8 @@ async function analyzeRepository() {
                 </div>
             `;
         }).join("");
-                // ==========================================
+        
+        // ==========================================
         // PREPARE DASHBOARD HTML
         // ==========================================
 
@@ -822,7 +809,6 @@ async function analyzeRepository() {
                 "<p>No vulnerability information available.</p>"
             }
         `;
-
 
         // ==========================================
         // FINAL DASHBOARD DISPLAY
@@ -902,23 +888,19 @@ async function analyzeRepository() {
                 </div>
             </section>
 
-
             <!-- REPOSITORY STRUCTURE -->
 
             <section class="result-section">
                 <h3>Repository Structure</h3>
 
                 <div class="result-card">
-
                     <h4>Folders</h4>
                     ${foldersHTML}
 
                     <h4 style="margin-top: 20px;">Files</h4>
                     ${filesHTML}
-
                 </div>
             </section>
-
 
             <!-- PROGRAMMING LANGUAGES -->
 
@@ -930,7 +912,6 @@ async function analyzeRepository() {
                 </div>
             </section>
 
-
             <!-- TECHNOLOGY ECOSYSTEMS -->
 
             <section class="result-section">
@@ -940,7 +921,6 @@ async function analyzeRepository() {
                     ${ecosystemsHTML}
                 </div>
             </section>
-
 
             <!-- CODE QUALITY -->
 
@@ -986,7 +966,6 @@ async function analyzeRepository() {
                 </div>
             </section>
 
-
             <!-- DEPENDENCY ANALYSIS -->
 
             <section class="result-section">
@@ -997,7 +976,6 @@ async function analyzeRepository() {
                 </div>
             </section>
 
-
             <!-- DEPENDENCY VERSION ANALYSIS -->
 
             <section class="result-section">
@@ -1007,7 +985,6 @@ async function analyzeRepository() {
                     ${versionHTML}
                 </div>
             </section>
-
 
             <!-- SECURITY VULNERABILITY ANALYSIS -->
 
@@ -1024,7 +1001,6 @@ async function analyzeRepository() {
             "Repository analysis completed successfully.";
 
         message.style.color = "#4ade80";
-
 
     } catch (error) {
 
@@ -1056,6 +1032,7 @@ async function analyzeRepository() {
 
     }
 }
+
 // ==========================================
 // AI CODE EXPLANATION
 // ==========================================
@@ -1064,28 +1041,49 @@ async function explainIssue(issueIndex, button) {
 
     const originalText = button.textContent;
 
+    const issue = window.codeAtlasIssues?.[issueIndex];
+
+    if (!issue) {
+        alert("Issue not found. Please analyze the repository again.");
+        return;
+    }
+
     button.disabled = true;
     button.textContent = "Generating explanation...";
 
     try {
+
+        const requestData = {
+            title: String(issue.title || "Code Quality Issue"),
+            severity: String(issue.severity || "Low"),
+            description: String(issue.description || ""),
+            file: String(issue.file || ""),
+            code: String(issue.code || "")
+        };
 
         const response = await fetch(`${API_URL}/explain-issue`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
             },
-            body: JSON.stringify({
-                issue_index: issueIndex,
-                analysis_data: lastAnalysisData
-            })
+            body: JSON.stringify(requestData)
         });
 
         const data = await response.json();
 
         if (!response.ok) {
-            throw new Error(
-                data.detail || "Unable to generate AI explanation."
-            );
+
+            let errorMessage = "Unable to generate AI explanation.";
+
+            if (Array.isArray(data.detail)) {
+                errorMessage = data.detail
+                    .map(item => item.msg || JSON.stringify(item))
+                    .join("\n");
+            } else if (typeof data.detail === "string") {
+                errorMessage = data.detail;
+            }
+
+            throw new Error(errorMessage);
         }
 
         const explanation =
@@ -1102,8 +1100,10 @@ async function explainIssue(issueIndex, button) {
 
             explanationBox.style.display = "block";
 
-            explanationBox.textContent = explanation;
-
+            explanationBox.textContent =
+                typeof explanation === "string"
+                    ? explanation
+                    : JSON.stringify(explanation, null, 2);
         }
 
         button.textContent = "Explanation Generated";
@@ -1112,10 +1112,7 @@ async function explainIssue(issueIndex, button) {
 
         console.error("AI explanation error:", error);
 
-        alert(
-            error.message ||
-            "Failed to generate AI explanation."
-        );
+        alert(error.message || "Failed to generate AI explanation.");
 
         button.textContent = originalText;
 
@@ -1331,9 +1328,7 @@ document.addEventListener("DOMContentLoaded", function () {
         link.addEventListener("click", function () {
 
             navLinks.forEach(function (item) {
-
                 item.classList.remove("active");
-
             });
 
             link.classList.add("active");
@@ -1372,3 +1367,5 @@ document.addEventListener("DOMContentLoaded", function () {
 // ==========================================
 // END OF CODEATLAS FRONTEND SCRIPT
 // ==========================================
+
+
