@@ -1,35 +1,21 @@
 import re
+import ast
 
 
 # ============================================================
-# CODEATLAS - SMART CODE QUALITY SCANNER
+# CODEATLAS - ADVANCED CODE QUALITY SCANNER
 # Heuristic static analysis. Findings require human review.
 # ============================================================
 
 
-# Common placeholder values that should not be reported as secrets.
 SECRET_PLACEHOLDERS = {
-    "config",
-    "secret_key",
-    "your_api_key",
-    "your_password",
-    "your_token",
-    "replace_me",
-    "example",
-    "placeholder",
-    "changeme",
-    "xxxxxxxx",
-    "your_secret",
-    "test",
-    "dummy",
-    "sample",
-    "none",
-    "null",
-    "undefined"
+    "config", "secret_key", "your_api_key", "your_password",
+    "your_token", "replace_me", "example", "placeholder",
+    "changeme", "xxxxxxxx", "your_secret", "test", "dummy",
+    "sample", "none", "null", "undefined"
 }
 
 
-# Secret detection pattern.
 SECRET_PATTERN = re.compile(
     r"""(?i)\b(api_key|apikey|secret_key|password|passwd|access_token|auth_token)\b\s*[:=]\s*["']([^"']+)["']"""
 )
@@ -42,8 +28,8 @@ SECURITY_RULES = [
         "severity": "High",
         "pattern": SECRET_PATTERN,
         "description": (
-            "A variable may contain a hardcoded password, "
-            "token, or secret. Review the value carefully."
+            "A variable may contain a hardcoded password, token, "
+            "or secret. Review the value carefully."
         )
     },
     {
@@ -149,12 +135,12 @@ DEBUG_RULES = [
 ALL_RULES = SECURITY_RULES + DEBUG_RULES
 
 
-# ------------------------------------------------------------
-# Remove comments and mask string literals for code-only rules.
-# Keep a separate version containing strings for secret detection.
-# ------------------------------------------------------------
+# ============================================================
+# CLEAN SOURCE CODE
+# ============================================================
 
 def clean_source_line(line, language, in_block_comment=False):
+
     code_with_strings = []
     code_without_strings = []
     comments = []
@@ -185,60 +171,67 @@ def clean_source_line(line, language, in_block_comment=False):
         next_two = line[index:index + 2]
         next_three = line[index:index + 3]
 
-        # Continue an existing multiline block comment.
         if in_block_comment:
+
             if next_two == "*/":
                 in_block_comment = False
                 index += 2
             else:
                 comments.append(char)
                 index += 1
+
             continue
 
-        # Continue an existing multiline string.
         if quote is not None:
+
             code_with_strings.append(char)
             code_without_strings.append(" ")
 
             if escaped:
                 escaped = False
+
             elif char == "\\":
                 escaped = True
+
             elif triple_quote and next_three == quote * 3:
                 code_with_strings.extend([" ", " "])
                 code_without_strings.extend([" ", " "])
                 index += 2
                 quote = None
                 triple_quote = False
+
             elif not triple_quote and char == quote:
                 quote = None
 
             index += 1
             continue
 
-        # Start a string literal.
         if python_language and next_three in ('"""', "'''"):
+
             quote = line[index]
             triple_quote = True
+
             code_with_strings.extend([" ", " ", " "])
             code_without_strings.extend([" ", " ", " "])
+
             index += 3
             continue
 
         if char in ('"', "'"):
+
             quote = char
             code_with_strings.append(char)
             code_without_strings.append(" ")
+
             index += 1
             continue
 
-        # Start a block comment.
         if slash_comments and next_two == "/*":
+
             in_block_comment = True
             index += 2
             continue
 
-        # Start a single-line comment.
         if hash_comments and char == "#":
             comments.append(line[index:])
             break
@@ -264,13 +257,13 @@ def clean_source_line(line, language, in_block_comment=False):
     )
 
 
-# ------------------------------------------------------------
-# Check whether a potential secret looks like a real value.
-# ------------------------------------------------------------
+# ============================================================
+# SECRET DETECTION
+# ============================================================
 
 def is_possible_secret(match):
-    value = match.group(2).strip()
 
+    value = match.group(2).strip()
     lowered_value = value.lower()
 
     if lowered_value in SECRET_PLACEHOLDERS:
@@ -282,28 +275,178 @@ def is_possible_secret(match):
     ):
         return False
 
-    # Very short values are usually configuration labels.
     if len(value) < 8:
         return False
 
-    # Require a mixture of letters and digits.
     has_letter = bool(re.search(r"[a-zA-Z]", value))
     has_digit = bool(re.search(r"\d", value))
 
-    if not (has_letter and has_digit):
-        return False
-
-    return True
+    return has_letter and has_digit
 
 
-# ------------------------------------------------------------
-# Scan one source file.
-# ------------------------------------------------------------
+# ============================================================
+# PYTHON UNUSED IMPORT AND VARIABLE DETECTION
+# ============================================================
+
+def scan_python_unused_items(file_path, source_code):
+
+    issues = []
+
+    try:
+        tree = ast.parse(source_code)
+    except SyntaxError:
+        return issues
+
+    loaded_names = set()
+
+    for node in ast.walk(tree):
+
+        if isinstance(node, ast.Name) and isinstance(
+            node.ctx, ast.Load
+        ):
+            loaded_names.add(node.id)
+
+    source_lines = source_code.splitlines()
+    reported_imports = set()
+
+    # Check unused imports.
+    for node in ast.walk(tree):
+
+        if isinstance(node, ast.Import):
+
+            for alias in node.names:
+
+                name = alias.asname or alias.name.split(".")[0]
+
+                if (
+                    name not in loaded_names
+                    and name not in reported_imports
+                    and not name.startswith("_")
+                ):
+
+                    reported_imports.add(name)
+
+                    issues.append({
+                        "rule_id": "UNUSED_IMPORT",
+                        "title": "Possibly Unused Import",
+                        "severity": "Low",
+                        "file": file_path,
+                        "line": node.lineno,
+                        "language": "Python",
+                        "description": (
+                            f"The imported name '{name}' does not appear "
+                            "to be used in this file."
+                        ),
+                        "code": source_lines[
+                            node.lineno - 1
+                        ].strip()[:200]
+                    })
+
+        elif isinstance(node, ast.ImportFrom):
+
+            if node.module == "__future__":
+                continue
+
+            for alias in node.names:
+
+                if alias.name == "*":
+                    continue
+
+                name = alias.asname or alias.name
+
+                if (
+                    name not in loaded_names
+                    and name not in reported_imports
+                    and not name.startswith("_")
+                ):
+
+                    reported_imports.add(name)
+
+                    issues.append({
+                        "rule_id": "UNUSED_IMPORT",
+                        "title": "Possibly Unused Import",
+                        "severity": "Low",
+                        "file": file_path,
+                        "line": node.lineno,
+                        "language": "Python",
+                        "description": (
+                            f"The imported name '{name}' does not appear "
+                            "to be used in this file."
+                        ),
+                        "code": source_lines[
+                            node.lineno - 1
+                        ].strip()[:200]
+                    })
+
+    # Check possibly unused variables.
+    reported_variables = set()
+
+    for node in ast.walk(tree):
+
+        target_names = []
+
+        if isinstance(node, ast.Assign):
+
+            for target in node.targets:
+                target_names.extend(get_assigned_names(target))
+
+        elif isinstance(node, (ast.AnnAssign, ast.NamedExpr)):
+
+            target_names.extend(get_assigned_names(node.target))
+
+        for name, line_number in target_names:
+
+            if (
+                name not in loaded_names
+                and name not in reported_variables
+                and not name.startswith("_")
+            ):
+
+                reported_variables.add(name)
+
+                code_line = (
+                    source_lines[line_number - 1].strip()[:200]
+                    if 0 < line_number <= len(source_lines)
+                    else ""
+                )
+
+                issues.append({
+                    "rule_id": "UNUSED_VARIABLE",
+                    "title": "Possibly Unused Variable",
+                    "severity": "Low",
+                    "file": file_path,
+                    "line": line_number,
+                    "language": "Python",
+                    "description": (
+                        f"The variable '{name}' is assigned a value "
+                        "but does not appear to be used."
+                    ),
+                    "code": code_line
+                })
+
+    return issues
+
+
+def get_assigned_names(target):
+
+    names = []
+
+    if isinstance(target, ast.Name):
+        names.append((target.id, target.lineno))
+
+    elif isinstance(target, (ast.Tuple, ast.List)):
+
+        for element in target.elts:
+            names.extend(get_assigned_names(element))
+
+    return names
+
+
+# ============================================================
+# SCAN ONE SOURCE FILE
+# ============================================================
 
 def scan_source_code(file_path, source_code, language):
-    """
-    Scan one source file and return potential code issues.
-    """
 
     issues = []
 
@@ -311,7 +454,6 @@ def scan_source_code(file_path, source_code, language):
         return issues
 
     lines = source_code.splitlines()
-
     in_block_comment = False
 
     for line_number, line in enumerate(lines, start=1):
@@ -335,7 +477,6 @@ def scan_source_code(file_path, source_code, language):
         for rule in ALL_RULES:
 
             rule_id = rule["id"]
-
             supported_languages = rule.get("languages")
 
             if (
@@ -344,41 +485,29 @@ def scan_source_code(file_path, source_code, language):
             ):
                 continue
 
-            # Secret detection needs string values.
             if rule_id == "HARDCODED_SECRET":
 
-                for match in rule["pattern"].finditer(
-                    code_with_strings
-                ):
-                    if is_possible_secret(match):
-                        findings.append((rule, match))
+                for match in rule["pattern"].finditer(code_with_strings):
 
-            # TODO and FIXME should only be detected in comments.
+                    if is_possible_secret(match):
+                        findings.append(rule)
+
             elif rule_id in ["TODO", "FIXME"]:
 
-                if not comments:
-                    continue
+                if comments and rule["pattern"].search(comments):
+                    findings.append(rule)
 
-                for match in rule["pattern"].finditer(comments):
-                    findings.append((rule, match))
-
-            # Other rules should only inspect executable code.
             else:
 
                 if not code_without_strings.strip():
                     continue
 
-                match = rule["pattern"].search(
-                    code_without_strings
-                )
+                if rule["pattern"].search(code_without_strings):
+                    findings.append(rule)
 
-                if match:
-                    findings.append((rule, match))
-
-        # Prevent duplicate rule findings on the same line.
         reported_rules = set()
 
-        for rule, match in findings:
+        for rule in findings:
 
             if rule["id"] in reported_rules:
                 continue
@@ -396,17 +525,137 @@ def scan_source_code(file_path, source_code, language):
                 "code": line.strip()[:200]
             })
 
+    # Additional Python-specific checks.
+    if language == "Python":
+
+        issues.extend(
+            scan_python_unused_items(file_path, source_code)
+        )
+
     return issues
 
 
-# ------------------------------------------------------------
-# Generate severity summary.
-# ------------------------------------------------------------
+# ============================================================
+# FAST DUPLICATE CODE DETECTION
+# ============================================================
+
+def find_duplicate_code(files, minimum_lines=4):
+
+    issues = []
+
+    # Dictionary allows fast lookup of previously seen blocks.
+    seen_blocks = {}
+
+    for file in files:
+
+        file_path = file.get("path", "")
+        source_code = file.get("content", "")
+        language = file.get("language", "Other")
+
+        if not isinstance(source_code, str) or not source_code.strip():
+            continue
+
+        normalized_lines = []
+        original_line_numbers = []
+
+        in_block_comment = False
+
+        for line_number, line in enumerate(
+            source_code.splitlines(), start=1
+        ):
+
+            if not line.strip():
+                continue
+
+            (
+                _,
+                code_without_strings,
+                _,
+                in_block_comment
+            ) = clean_source_line(
+                line,
+                language,
+                in_block_comment
+            )
+
+            normalized = re.sub(
+                r"\s+",
+                "",
+                code_without_strings
+            )
+
+            if len(normalized) < 5:
+                continue
+
+            normalized_lines.append(normalized)
+            original_line_numbers.append(line_number)
+
+        if len(normalized_lines) < minimum_lines:
+            continue
+
+        # Examine each consecutive block in this file.
+        for start in range(
+            len(normalized_lines) - minimum_lines + 1
+        ):
+
+            block = tuple(
+                normalized_lines[
+                    start:start + minimum_lines
+                ]
+            )
+
+            first_occurrence = seen_blocks.get(block)
+
+            # First time this block is seen.
+            if first_occurrence is None:
+
+                seen_blocks[block] = {
+                    "path": file_path,
+                    "line": original_line_numbers[start]
+                }
+
+                continue
+
+            # Do not report repeated blocks from the same file.
+            if first_occurrence["path"] == file_path:
+                continue
+
+            # Report a duplicate across different files.
+            issues.append({
+                "rule_id": "DUPLICATE_CODE",
+                "title": "Possible Duplicate Code",
+                "severity": "Medium",
+                "file": file_path,
+                "line": original_line_numbers[start],
+                "language": "Multiple",
+                "description": (
+                    "A block of code appears to be repeated "
+                    f"in '{first_occurrence['path']}' and "
+                    f"'{file_path}'. Consider reusing a function "
+                    "or shared component."
+                ),
+                "code": (
+                    f"Similar code found in "
+                    f"{first_occurrence['path']} and {file_path}."
+                )
+            })
+
+            # Mark this block as already reported.
+            # This avoids repeatedly reporting the same block.
+            seen_blocks[block] = {
+                "path": file_path,
+                "line": original_line_numbers[start],
+                "reported": True
+            }
+
+    return issues
+
+
+# ============================================================
+# GENERATE ISSUE SUMMARY
+# ============================================================
 
 def summarize_issues(issues):
-    """
-    Generate issue counts by severity.
-    """
 
     summary = {
         "total_issues": len(issues),
@@ -425,17 +674,11 @@ def summarize_issues(issues):
     return summary
 
 
-# ------------------------------------------------------------
-# Analyze multiple source files.
-# ------------------------------------------------------------
+# ============================================================
+# ANALYZE MULTIPLE SOURCE FILES
+# ============================================================
 
 def analyze_source_files(files):
-    """
-    Scan a collection of source files.
-
-    Each file must contain:
-    path, content, and language.
-    """
 
     all_issues = []
 
@@ -455,6 +698,11 @@ def analyze_source_files(files):
         )
 
         all_issues.extend(issues)
+
+    # Check for repeated code across different files.
+    all_issues.extend(
+        find_duplicate_code(files)
+    )
 
     return {
         "summary": summarize_issues(all_issues),

@@ -1,12 +1,15 @@
+
 import re
 import requests
 from urllib.parse import quote
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 PYPI_URL = "https://pypi.org/pypi/{package}/json"
 NPM_URL = "https://registry.npmjs.org/{package}/latest"
 
 REQUEST_TIMEOUT = 10
+MAX_WORKERS = 8
 
 HEADERS = {
     "User-Agent": "CodeAtlas-Dependency-Checker"
@@ -14,10 +17,7 @@ HEADERS = {
 
 
 def is_exact_version(version):
-    """
-    Check whether a version looks like an exact version
-    rather than a version range or an unspecified value.
-    """
+    """Check whether a version is an exact version."""
 
     if not version or not isinstance(version, str):
         return False
@@ -25,14 +25,10 @@ def is_exact_version(version):
     version = version.strip()
 
     if version.lower() in {
-        "not specified",
-        "latest",
-        "*",
-        "unknown"
+        "not specified", "latest", "*", "unknown"
     }:
         return False
 
-    # Version ranges and common constraint operators
     range_symbols = ["^", "~", ">", "<", "*", ",", "||"]
 
     if any(symbol in version for symbol in range_symbols):
@@ -41,7 +37,12 @@ def is_exact_version(version):
     if version.startswith(("=", "v")):
         version = version.lstrip("=v").strip()
 
-    return bool(re.fullmatch(r"\d+(?:\.\d+)*(?:[-+][A-Za-z0-9.-]+)?", version))
+    return bool(
+        re.fullmatch(
+            r"\d+(?:\.\d+)*(?:[-+][A-Za-z0-9.-]+)?",
+            version
+        )
+    )
 
 
 def normalize_version(version):
@@ -51,12 +52,7 @@ def normalize_version(version):
 
 
 def compare_versions(declared_version, latest_version):
-    """
-    Compare simple numeric version components.
-
-    This is intentionally conservative. It does not attempt
-    to fully implement every package manager's version rules.
-    """
+    """Compare simple numeric version components."""
 
     declared = normalize_version(declared_version)
     latest = normalize_version(latest_version)
@@ -69,11 +65,13 @@ def compare_versions(declared_version, latest_version):
 
     try:
         declared_parts = tuple(
-            int(part) for part in declared_match.group(1).split(".")
+            int(part)
+            for part in declared_match.group(1).split(".")
         )
 
         latest_parts = tuple(
-            int(part) for part in latest_match.group(1).split(".")
+            int(part)
+            for part in latest_match.group(1).split(".")
         )
 
         length = max(len(declared_parts), len(latest_parts))
@@ -94,7 +92,7 @@ def compare_versions(declared_version, latest_version):
 
 
 def get_latest_python_version(package_name):
-    """Get the latest published Python package version from PyPI."""
+    """Get the latest Python package version from PyPI."""
 
     try:
         encoded_name = quote(package_name, safe="")
@@ -130,7 +128,7 @@ def get_latest_python_version(package_name):
 
 
 def get_latest_npm_version(package_name):
-    """Get the latest published JavaScript package version from npm."""
+    """Get the latest JavaScript package version from npm."""
 
     try:
         encoded_name = quote(package_name, safe="@/")
@@ -165,21 +163,64 @@ def get_latest_npm_version(package_name):
         return None, "Invalid registry response"
 
 
+def get_dependency_ecosystem(dependency):
+    """Identify ecosystem from dependency manifest filename."""
+
+    ecosystem = dependency.get("ecosystem")
+
+    if ecosystem:
+        return ecosystem
+
+    manifest_file = str(
+        dependency.get("manifest_file", "")
+    ).lower()
+
+    if manifest_file.endswith("requirements.txt"):
+        return "Python"
+
+    if manifest_file.endswith("package.json"):
+        return "JavaScript"
+
+    if manifest_file.endswith("pom.xml"):
+        return "Java"
+
+    if manifest_file.endswith("go.mod"):
+        return "Go"
+
+    if manifest_file.endswith("cargo.toml"):
+        return "Rust"
+
+    if manifest_file.endswith("composer.json"):
+        return "PHP"
+
+    if manifest_file.endswith("gemfile"):
+        return "Ruby"
+
+    return "Unknown"
+
+
+def get_registry_details(ecosystem):
+    """Return registry name and version-fetching function."""
+
+    normalized = ecosystem.lower()
+
+    if normalized == "python":
+        return "pypi", get_latest_python_version
+
+    if normalized in {"javascript", "node", "npm"}:
+        return "npm", get_latest_npm_version
+
+    return None, None
+
+
 def check_dependency_version(dependency, ecosystem, cache=None):
-    """
-    Check one dependency against its public package registry.
-
-    Supported ecosystems:
-    - Python
-    - JavaScript
-
-    Other ecosystems are marked as unsupported for now.
-    """
+    """Check one dependency against its public package registry."""
 
     if cache is None:
         cache = {}
 
     name = str(dependency.get("name", "")).strip()
+
     declared_version = str(
         dependency.get("version", "Not specified")
     ).strip()
@@ -204,17 +245,9 @@ def check_dependency_version(dependency, ecosystem, cache=None):
         )
         return result
 
-    normalized_ecosystem = ecosystem.lower()
+    registry, fetch_latest = get_registry_details(ecosystem)
 
-    if normalized_ecosystem == "python":
-        registry = "pypi"
-        fetch_latest = get_latest_python_version
-
-    elif normalized_ecosystem in {"javascript", "node", "npm"}:
-        registry = "npm"
-        fetch_latest = get_latest_npm_version
-
-    else:
+    if not registry:
         result["message"] = (
             "Version checking is not yet supported for this ecosystem"
         )
@@ -232,6 +265,7 @@ def check_dependency_version(dependency, ecosystem, cache=None):
         return result
 
     result["latest_version"] = latest_version
+
     result["status"] = compare_versions(
         declared_version,
         latest_version
@@ -248,38 +282,80 @@ def check_dependency_version(dependency, ecosystem, cache=None):
 
 def check_dependency_versions(dependencies):
     """
-    Check a list of extracted dependencies.
+    Check dependencies using concurrent registry requests.
 
-    Returns a summary and individual version-check results.
+    Each unique supported package is fetched only once.
     """
 
     cache = {}
     results = []
 
+    # Step 1: Identify unique packages that need registry checks.
+    package_tasks = {}
+
     for dependency in dependencies:
-        ecosystem = dependency.get("ecosystem", "")
 
-        if not ecosystem:
-            manifest_file = str(
-                dependency.get("manifest_file", "")
-            ).lower()
+        ecosystem = get_dependency_ecosystem(dependency)
 
-            if manifest_file.endswith("requirements.txt"):
-                ecosystem = "Python"
-            elif manifest_file.endswith("package.json"):
-                ecosystem = "JavaScript"
-            elif manifest_file.endswith("pom.xml"):
-                ecosystem = "Java"
-            elif manifest_file.endswith("go.mod"):
-                ecosystem = "Go"
-            elif manifest_file.endswith("cargo.toml"):
-                ecosystem = "Rust"
-            elif manifest_file.endswith("composer.json"):
-                ecosystem = "PHP"
-            elif manifest_file.endswith("gemfile"):
-                ecosystem = "Ruby"
-            else:
-                ecosystem = "Unknown"
+        name = str(
+            dependency.get("name", "")
+        ).strip()
+
+        version = str(
+            dependency.get("version", "Not specified")
+        ).strip()
+
+        if not name or not is_exact_version(version):
+            continue
+
+        registry, fetch_latest = get_registry_details(ecosystem)
+
+        if not registry:
+            continue
+
+        cache_key = f"{registry}:{name.lower()}"
+
+        if cache_key not in package_tasks:
+            package_tasks[cache_key] = (
+                name,
+                fetch_latest
+            )
+
+    # Step 2: Fetch unique packages concurrently.
+    with ThreadPoolExecutor(
+        max_workers=MAX_WORKERS
+    ) as executor:
+
+        future_to_key = {}
+
+        for cache_key, task in package_tasks.items():
+
+            name, fetch_latest = task
+
+            future = executor.submit(
+                fetch_latest,
+                name
+            )
+
+            future_to_key[future] = cache_key
+
+        for future in as_completed(future_to_key):
+
+            cache_key = future_to_key[future]
+
+            try:
+                cache[cache_key] = future.result()
+
+            except Exception:
+                cache[cache_key] = (
+                    None,
+                    "Could not retrieve package version"
+                )
+
+    # Step 3: Build individual results using the cache.
+    for dependency in dependencies:
+
+        ecosystem = get_dependency_ecosystem(dependency)
 
         results.append(
             check_dependency_version(
@@ -289,19 +365,29 @@ def check_dependency_versions(dependencies):
             )
         )
 
+    # Step 4: Return the original summary structure.
     return {
         "total_checked": len(results),
+
         "up_to_date": sum(
-            item["status"] == "Up to date" for item in results
+            item["status"] == "Up to date"
+            for item in results
         ),
+
         "outdated": sum(
-            item["status"] == "Outdated" for item in results
+            item["status"] == "Outdated"
+            for item in results
         ),
+
         "cannot_compare": sum(
-            item["status"] == "Cannot compare" for item in results
+            item["status"] == "Cannot compare"
+            for item in results
         ),
+
         "newer_than_latest": sum(
-            item["status"] == "Newer than latest" for item in results
+            item["status"] == "Newer than latest"
+            for item in results
         ),
+
         "results": results
     }
