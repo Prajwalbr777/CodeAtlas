@@ -1,6 +1,7 @@
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel
 from urllib.parse import urlparse
 
@@ -11,6 +12,8 @@ from backend.ecosystem_scanner import detect_ecosystems
 from backend.dependency_analyzer import analyze_dependencies
 from backend.dependency_version_checker import check_dependency_versions
 from backend.vulnerability_scanner import scan_vulnerabilities
+from backend.ai_code_explainer import explain_code_issue
+from backend.report_generator import generate_pdf_report
 
 
 # Create FastAPI application
@@ -18,10 +21,11 @@ app = FastAPI(
     title="CodeAtlas API",
     description=(
         "Codebase intelligence, ecosystem detection, "
-        "code quality, dependency analysis, version checking "
-        "and vulnerability detection platform"
+        "code quality, dependency analysis, version checking, "
+        "vulnerability detection, AI code explanation "
+        "and PDF report generation"
     ),
-    version="1.5.0"
+    version="1.7.0"
 )
 
 
@@ -35,9 +39,18 @@ app.add_middleware(
 )
 
 
-# Request model
+# Repository request model
 class RepositoryRequest(BaseModel):
     repo_url: str
+
+
+# AI explanation request model
+class IssueExplanationRequest(BaseModel):
+    title: str
+    severity: str
+    description: str = ""
+    file: str = ""
+    code: str = ""
 
 
 # Home route
@@ -46,7 +59,7 @@ def home():
     return {
         "message": "Welcome to CodeAtlas!",
         "status": "Backend is running successfully",
-        "version": "1.5.0"
+        "version": "1.7.0"
     }
 
 
@@ -193,3 +206,46 @@ def analyze_repository(request: RepositoryRequest):
             "results": vulnerability_result["results"]
         }
     }
+
+
+# AI-powered code issue explanation
+@app.post("/explain-issue")
+def explain_issue(request: IssueExplanationRequest):
+
+    issue = request.dict()
+
+    result = explain_code_issue(issue)
+
+    if result.get("status") == "error":
+        raise HTTPException(
+            status_code=503,
+            detail=result.get("message", "AI explanation failed")
+        )
+
+    return result
+
+
+# Generate and download PDF report
+@app.post("/download-report")
+def download_report(report_data: dict):
+
+    try:
+        # Generate PDF using the report generator
+        pdf_content = generate_pdf_report(report_data)
+
+        # Return downloadable PDF file
+        return Response(
+            content=pdf_content,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="CodeAtlas_Report.pdf"'
+                )
+            }
+        )
+
+    except Exception as error:
+        raise HTTPException(
+            status_code=500,
+            detail=f"PDF report generation failed: {str(error)}"
+        )

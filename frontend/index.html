@@ -1,108 +1,245 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#080d1a">
     <title>CodeAtlas | AI Code Intelligence</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
+    <div class="scroll-progress" id="scrollProgress"></div>
+
     <div class="app-container">
 
-        <!-- Sidebar -->
+        <!-- SIDEBAR -->
         <aside class="sidebar">
+
             <div class="logo">
                 <span>⌘</span> CodeAtlas
             </div>
 
-            <nav>
-                <p class="nav-heading">WORKSPACE</p>
-                <a href="#" class="active">▦ Dashboard</a>
-                <a href="#">⌘ Repositories</a>
-                <a href="#">⌕ Code Analysis</a>
-                <a href="#">⚠ Issues</a>
+            <div class="sidebar-label">WORKSPACE</div>
 
-                <p class="nav-heading">SETTINGS</p>
-                <a href="#">⚙ Settings</a>
+            <nav class="main-nav">
+
+                <a href="#home" class="active" data-section="home">
+                    <span>▦</span> Dashboard
+                </a>
+
+                <a href="#repository" data-section="repository">
+                    <span>⌘</span> Repository
+                </a>
+
+                <a href="#results" data-section="results">
+                    <span>⌕</span> Code Analysis
+                </a>
+
+                <a href="#security" data-section="security">
+                    <span>⚠</span> Security
+                </a>
+
             </nav>
+
+            <div class="sidebar-label">PROJECT</div>
+
+            <div class="sidebar-project">
+                <div class="project-icon">CA</div>
+                <div>
+                    <strong>CodeAtlas Engine</strong>
+                    <small>AI Code Intelligence</small>
+                </div>
+            </div>
 
             <div class="sidebar-bottom">
                 <span class="status-dot"></span>
                 Backend Connected
+                <small>Local development environment</small>
             </div>
+
         </aside>
 
-        <!-- Main Content -->
-        <main class="main-content">
 
+        <!-- MAIN CONTENT -->
+        <main class="main-content" id="home">
+
+            <!-- TOPBAR -->
             <header class="topbar">
+
                 <div>
+                    <div class="eyebrow">DEVELOPER WORKSPACE</div>
                     <h2>Dashboard</h2>
-                    <p>Welcome to your AI-powered code intelligence platform.</p>
+                    <p>Understand your code. Discover what matters.</p>
                 </div>
-                <div class="profile">CA</div>
+
+                <div class="topbar-actions">
+                    <span class="system-status">
+                        <span class="status-dot"></span>
+                        System Online
+                    </span>
+
+                    <div class="profile">CA</div>
+                </div>
+
             </header>
 
-            <!-- Repository Input -->
-            <section class="welcome-section">
-                <h1>Understand your codebase.</h1>
-                <p>Connect a GitHub repository and let CodeAtlas analyze your code.</p>
 
-                <div class="input-box">
-                    <input
-                        type="text"
-                        id="repoUrl"
-                        placeholder="https://github.com/owner/repository"
-                    >
-                    <button id="analyzeBtn" onclick="analyzeRepository()">
-                        Analyze Repository →
-                    </button>
-                </div>
-                <p id="message"></p>
-            </section>
+            <!-- HERO -->
+            <section class="welcome-section" id="repository">
 
-            <!-- Statistics -->
-            <section class="stats-grid">
-                <div class="stat-card">
-                    <p>Repositories Analyzed</p>
-                    <h2 id="repoCount">0</h2>
-                </div>
+                <div class="hero-content">
 
-                <div class="stat-card">
-                    <p>Files Discovered</p>
-                    <h2 id="fileCount">0</h2>
-                </div>
+                    <span class="hero-badge">
+                        ✦ AI-POWERED CODE INTELLIGENCE
+                    </span>
 
-                <div class="stat-card">
-                    <p>Issues Detected</p>
-                    <h2 id="issueCount">0</h2>
-                </div>
-            </section>
+                    <h1>
+                        Understand your
+                        <span class="gradient-text">codebase.</span>
+                    </h1>
 
-            <!-- Results -->
-            <section class="results-section">
-                <div class="section-header">
-                    <h2>Repository Analysis</h2>
-                    <span class="live-label">● LIVE</span>
-                </div>
+                    <p>
+                        Connect your GitHub repository and discover code quality
+                        issues, technology ecosystems, dependency risks and
+                        security vulnerabilities.
+                    </p>
 
-                <div id="results">
-                    <div class="empty-state">
-                        <div class="empty-icon">⌘</div>
-                        <h3>No repository analyzed yet</h3>
-                        <p>Enter a GitHub URL above to get started.</p>
+                    <div class="input-box">
+
+                        <input
+                            type="text"
+                            id="repoUrl"
+                            placeholder="https://github.com/owner/repository"
+                            autocomplete="off"
+                        >
+
+                        <button
+                            id="analyzeBtn"
+                            onclick="analyzeRepository()"
+                        >
+                            Analyze Repository →
+                        </button>
+
                     </div>
+
+                    <p class="input-hint">
+                        <span>●</span> Supports public GitHub repositories
+                    </p>
+
+                    <p id="message"></p>
+
                 </div>
+
+                <div class="hero-decoration">
+                    <div class="orbit orbit-one"></div>
+                    <div class="orbit orbit-two"></div>
+                    <div class="orbit-core">⌘</div>
+                    <div class="floating-code code-one">&lt;/&gt;</div>
+                    <div class="floating-code code-two">{ }</div>
+                </div>
+
             </section>
 
+
+            <!-- STATISTICS -->
+            <section class="stats-grid" id="overview">
+
+                <div class="stat-card">
+                    <div class="stat-top">
+                        <span>Repositories Analyzed</span>
+                        <span class="stat-icon purple">⌘</span>
+                    </div>
+                    <h2 id="repoCount">0</h2>
+                    <small>Repository scans completed</small>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-top">
+                        <span>Files Discovered</span>
+                        <span class="stat-icon blue">▤</span>
+                    </div>
+                    <h2 id="fileCount">0</h2>
+                    <small>Files discovered in repository</small>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-top">
+                        <span>Issues Detected</span>
+                        <span class="stat-icon orange">⚠</span>
+                    </div>
+                    <h2 id="issueCount">0</h2>
+                    <small>Potential code quality findings</small>
+                </div>
+
+            </section>
+
+
+            <!-- ANALYSIS AREA -->
+            <section class="results-section" id="results">
+
+                <div class="section-header">
+
+                    <div>
+                        <div class="eyebrow">ANALYSIS WORKSPACE</div>
+                        <h2>Repository Analysis</h2>
+                        <p>Your repository intelligence will appear here.</p>
+                    </div>
+
+                    <span class="live-label">
+                        <span class="status-dot"></span> LIVE
+                    </span>
+
+                </div>
+
+                <div class="empty-state">
+
+                    <div class="empty-icon">⌘</div>
+
+                    <h3>Ready to explore your codebase?</h3>
+
+                    <p>
+                        Enter a GitHub repository URL above to start
+                        your first CodeAtlas analysis.
+                    </p>
+
+                    <button
+                        type="button"
+                        class="empty-action"
+                        onclick="document.getElementById('repoUrl').focus(); window.scrollTo({top: 0, behavior: 'smooth'});"
+                    >
+                        Get Started →
+                    </button>
+
+                </div>
+
+            </section>
+
+
+            <!-- FOOTER -->
             <footer>
-                CodeAtlas © 2026 | AI-Powered Code Intelligence
+                <div class="footer-brand">⌘ CodeAtlas</div>
+                <p>AI-Powered Code Intelligence Platform</p>
+                <small>© 2026 CodeAtlas | Built for developers</small>
             </footer>
 
         </main>
+
     </div>
 
+
+    <!-- BACK TO TOP -->
+    <button
+        class="back-to-top"
+        id="backToTop"
+        aria-label="Back to top"
+        title="Back to top"
+    >
+        ↑
+    </button>
+
     <script src="script.js"></script>
+
 </body>
 </html>

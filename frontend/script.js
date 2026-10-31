@@ -1,4 +1,5 @@
 const API_URL = "http://127.0.0.1:8000";
+let lastAnalysisData = null;
 
 // ==========================================
 // MAIN REPOSITORY ANALYSIS FUNCTION
@@ -52,6 +53,9 @@ async function analyzeRepository() {
             );
         }
 
+        // Save complete analysis data for PDF generation.
+        lastAnalysisData = data;
+
         // ==========================================
         // EXTRACT BACKEND RESPONSE DATA
         // ==========================================
@@ -73,7 +77,6 @@ async function analyzeRepository() {
         const manifests = dependencyAnalysis.manifests || [];
         const dependencies = dependencyAnalysis.dependencies || [];
 
-        // Vulnerability analysis returned by the OSV scanner
         const vulnerabilityAnalysis = data.vulnerability_analysis || {};
         const vulnerabilityResults = vulnerabilityAnalysis.results || [];
 
@@ -218,7 +221,9 @@ async function analyzeRepository() {
         // CODE QUALITY ANALYSIS
         // ==========================================
 
-        const issueItems = issues.map(issue => {
+        window.codeAtlasIssues = issues;
+
+        const issueItems = issues.map((issue, index) => {
 
             const severity = String(
                 issue.severity || "low"
@@ -299,6 +304,39 @@ async function analyzeRepository() {
                     ">
                         Rule ID: ${escapeHTML(issue.rule_id)}
                     </p>
+
+                    <button
+                        type="button"
+                        onclick="explainIssue(${index}, this)"
+                        style="
+                            background: #7c3aed;
+                            color: white;
+                            border: none;
+                            padding: 9px 14px;
+                            border-radius: 6px;
+                            cursor: pointer;
+                            font-weight: 600;
+                            margin-top: 8px;
+                        "
+                    >
+                        Explain with AI
+                    </button>
+
+                    <div
+                        id="ai-explanation-${index}"
+                        style="
+                            display: none;
+                            margin-top: 14px;
+                            padding: 14px;
+                            border: 1px solid #4c1d95;
+                            border-radius: 8px;
+                            background: #111827;
+                            color: #e5e7eb;
+                            white-space: pre-wrap;
+                            overflow-wrap: anywhere;
+                            line-height: 1.6;
+                        "
+                    ></div>
 
                 </div>
             `;
@@ -402,7 +440,6 @@ async function analyzeRepository() {
                 </div>
             `;
         }).join("");
-
                 // ==========================================
         // DEPENDENCY VERSION ANALYSIS
         // ==========================================
@@ -513,6 +550,7 @@ async function analyzeRepository() {
             </div>
         `;
 
+
         // ==========================================
         // VULNERABILITY ANALYSIS SUMMARY
         // ==========================================
@@ -582,6 +620,7 @@ async function analyzeRepository() {
             </div>
         `;
 
+
         // ==========================================
         // VULNERABILITY DETAILS
         // ==========================================
@@ -612,16 +651,19 @@ async function analyzeRepository() {
                     vulnerability.references || [];
 
                 const aliasHTML = aliases.length
-                    ? `<p style="margin-top: 8px;">
-                        <strong>Aliases:</strong>
-                        ${escapeHTML(aliases.join(", "))}
-                       </p>`
+                    ? `
+                        <p style="margin-top: 8px;">
+                            <strong>Aliases:</strong>
+                            ${escapeHTML(aliases.join(", "))}
+                        </p>
+                    `
                     : "";
 
                 const referenceHTML = references.length
                     ? `
                         <div style="margin-top: 8px;">
                             <strong>References:</strong>
+
                             <ul style="padding-left: 20px;">
                                 ${references.slice(0, 5).map(reference => `
                                     <li>
@@ -737,213 +779,275 @@ async function analyzeRepository() {
                 </div>
             `;
         }).join("");
-
                 // ==========================================
+        // PREPARE DASHBOARD HTML
+        // ==========================================
+
+        const foldersHTML = folderItems
+            ? `<ul>${folderItems}</ul>`
+            : "<p>No folders found.</p>";
+
+        const filesHTML = fileItems
+            ? `<ul>${fileItems}</ul>`
+            : "<p>No files found.</p>";
+
+        const languagesHTML = languageItems
+            ? languageItems
+            : "<p>No programming languages detected.</p>";
+
+        const ecosystemsHTML = ecosystemItems
+            ? ecosystemItems
+            : "<p>No technology ecosystems detected.</p>";
+
+        const codeQualityHTML = issueItems
+            ? issueItems
+            : "<p>No code quality findings detected.</p>";
+
+        const dependencyHTML = manifestItems
+            ? manifestItems
+            : "<p>No dependency manifests detected.</p>";
+
+        const versionHTML = `
+            ${versionSummaryHTML}
+            ${
+                versionCards ||
+                "<p>No dependency version information available.</p>"
+            }
+        `;
+
+        const vulnerabilityHTML = `
+            ${vulnerabilitySummaryHTML}
+            ${
+                vulnerabilityCards ||
+                "<p>No vulnerability information available.</p>"
+            }
+        `;
+
+
+        // ==========================================
         // FINAL DASHBOARD DISPLAY
         // ==========================================
 
         results.innerHTML = `
+            <div class="results-header">
+                <div>
+                    <h2>Repository Analysis Complete</h2>
+                    <p>Your repository has been successfully analyzed.</p>
+                </div>
+            </div>
 
-            <div class="dashboard-section">
+            <div style="
+                display: flex;
+                justify-content: flex-end;
+                margin-bottom: 20px;
+            ">
+                <button
+                    type="button"
+                    onclick="downloadPDFReport(this)"
+                    style="
+                        background: linear-gradient(135deg, #2563eb, #4f46e5);
+                        color: white;
+                        border: none;
+                        padding: 12px 20px;
+                        border-radius: 8px;
+                        font-weight: 600;
+                        cursor: pointer;
+                        font-size: 14px;
+                    "
+                >
+                    📄 Download PDF Report
+                </button>
+            </div>
 
-                <h2>Repository Overview</h2>
+            <!-- REPOSITORY OVERVIEW -->
 
-                <div class="stats-grid">
+            <section class="result-section">
+                <h3>Repository Overview</h3>
 
-                    <div class="stat-card">
-                        <h3>${escapeHTML(analysis.total_files ?? files.length)}</h3>
-                        <p>Total Files</p>
+                <div class="overview-grid">
+
+                    <div class="overview-card">
+                        <span>Repository</span>
+                        <strong>
+                            ${escapeHTML(
+                                analysis.repository_name ||
+                                analysis.name ||
+                                repoUrl.split("/").slice(-1)[0] ||
+                                "GitHub Repository"
+                            )}
+                        </strong>
                     </div>
 
-                    <div class="stat-card">
-                        <h3>${escapeHTML(analysis.total_folders ?? folders.length)}</h3>
-                        <p>Total Folders</p>
+                    <div class="overview-card">
+                        <span>Total Files</span>
+                        <strong>
+                            ${analysis.total_files ?? files.length}
+                        </strong>
                     </div>
 
-                    <div class="stat-card">
-                        <h3>${escapeHTML(summary.total_issues ?? issues.length)}</h3>
-                        <p>Code Issues</p>
+                    <div class="overview-card">
+                        <span>Total Folders</span>
+                        <strong>
+                            ${analysis.total_folders ?? folders.length}
+                        </strong>
                     </div>
 
-                    <div class="stat-card">
-                        <h3>${escapeHTML(dependencyAnalysis.total_dependencies ?? dependencies.length)}</h3>
-                        <p>Dependencies</p>
+                    <div class="overview-card">
+                        <span>Languages</span>
+                        <strong>
+                            ${languages.length}
+                        </strong>
                     </div>
 
                 </div>
+            </section>
 
-            </div>
 
-            <div class="dashboard-section">
+            <!-- REPOSITORY STRUCTURE -->
 
-                <h2>Programming Languages</h2>
+            <section class="result-section">
+                <h3>Repository Structure</h3>
 
-                ${
-                    languageItems ||
-                    "<p>No programming languages detected.</p>"
-                }
+                <div class="result-card">
 
-            </div>
+                    <h4>Folders</h4>
+                    ${foldersHTML}
 
-            <div class="dashboard-section">
-
-                <h2>Technology Ecosystems</h2>
-
-                ${
-                    ecosystemItems ||
-                    "<p>No technology ecosystems detected.</p>"
-                }
-
-            </div>
-
-            <div class="dashboard-section">
-
-                <h2>Code Quality Analysis</h2>
-
-                <div class="stats-grid">
-
-                    <div class="stat-card">
-                        <h3>${escapeHTML(summary.total_issues ?? issues.length)}</h3>
-                        <p>Total Issues</p>
-                    </div>
-
-                    <div class="stat-card">
-                        <h3>${escapeHTML(summary.high ?? 0)}</h3>
-                        <p>High Severity</p>
-                    </div>
-
-                    <div class="stat-card">
-                        <h3>${escapeHTML(summary.medium ?? 0)}</h3>
-                        <p>Medium Severity</p>
-                    </div>
-
-                    <div class="stat-card">
-                        <h3>${escapeHTML(summary.low ?? 0)}</h3>
-                        <p>Low Severity</p>
-                    </div>
+                    <h4 style="margin-top: 20px;">Files</h4>
+                    ${filesHTML}
 
                 </div>
+            </section>
 
-                ${
-                    issueItems ||
-                    "<p>No code quality issues detected by the current scanner.</p>"
-                }
 
-            </div>
+            <!-- PROGRAMMING LANGUAGES -->
 
-            <div class="dashboard-section">
+            <section class="result-section">
+                <h3>Programming Languages</h3>
 
-                <h2>Dependency Manifest Analysis</h2>
+                <div class="result-card">
+                    ${languagesHTML}
+                </div>
+            </section>
 
-                <p style="color: #9ca3af; margin-bottom: 15px;">
-                    Detected dependency manifest files and their declared packages.
-                </p>
 
-                ${
-                    manifestItems ||
-                    "<p>No dependency manifest files detected.</p>"
-                }
+            <!-- TECHNOLOGY ECOSYSTEMS -->
 
-            </div>
+            <section class="result-section">
+                <h3>Detected Ecosystems</h3>
 
-            <div class="dashboard-section">
+                <div class="result-card">
+                    ${ecosystemsHTML}
+                </div>
+            </section>
 
-                <h2>Dependency Version Analysis</h2>
 
-                ${versionSummaryHTML}
+            <!-- CODE QUALITY -->
 
-                ${
-                    versionCards ||
-                    "<p>No dependency version results available.</p>"
-                }
+            <section class="result-section">
+                <h3>Code Quality Analysis</h3>
 
-                <p style="
-                    color: #9ca3af;
-                    font-size: 12px;
-                    margin-top: 12px;
-                ">
-                    Version checks currently support Python and JavaScript packages
-                    with exact versions. Version ranges and unsupported ecosystems
-                    may not be compared.
-                </p>
+                <div class="result-card">
 
-            </div>
+                    <div class="overview-grid">
 
-            <div class="dashboard-section">
+                        <div class="overview-card">
+                            <span>Total Issues</span>
+                            <strong>
+                                ${summary.total_issues ?? issues.length}
+                            </strong>
+                        </div>
 
-                <h2>Security Vulnerability Analysis</h2>
+                        <div class="overview-card">
+                            <span>High Severity</span>
+                            <strong>
+                                ${summary.high ?? 0}
+                            </strong>
+                        </div>
 
-                <p style="color: #9ca3af; margin-bottom: 15px;">
-                    Security checks are performed using the OSV vulnerability database.
-                </p>
+                        <div class="overview-card">
+                            <span>Medium Severity</span>
+                            <strong>
+                                ${summary.medium ?? 0}
+                            </strong>
+                        </div>
 
-                ${vulnerabilitySummaryHTML}
+                        <div class="overview-card">
+                            <span>Low Severity</span>
+                            <strong>
+                                ${summary.low ?? 0}
+                            </strong>
+                        </div>
 
-                ${
-                    vulnerabilityCards ||
-                    "<p>No vulnerability scan results are available.</p>"
-                }
+                    </div>
 
-                <p style="
-                    color: #9ca3af;
-                    font-size: 12px;
-                    margin-top: 12px;
-                ">
-                    This scanner checks supported dependencies with exact versions.
-                    No known vulnerabilities found does not guarantee that a package
-                    is completely secure.
-                </p>
+                    ${codeQualityHTML}
 
-            </div>
+                </div>
+            </section>
 
-            <div class="dashboard-section">
 
-                <h2>Repository Folders</h2>
+            <!-- DEPENDENCY ANALYSIS -->
 
-                <ul>
-                    ${
-                        folderItems ||
-                        "<li>No folders found.</li>"
-                    }
-                </ul>
+            <section class="result-section">
+                <h3>Dependency Analysis</h3>
 
-            </div>
+                <div class="result-card">
+                    ${dependencyHTML}
+                </div>
+            </section>
 
-            <div class="dashboard-section">
 
-                <h2>Repository Files</h2>
+            <!-- DEPENDENCY VERSION ANALYSIS -->
 
-                <ul>
-                    ${
-                        fileItems ||
-                        "<li>No files found.</li>"
-                    }
-                </ul>
+            <section class="result-section">
+                <h3>Dependency Version Analysis</h3>
 
-            </div>
+                <div class="result-card">
+                    ${versionHTML}
+                </div>
+            </section>
 
+
+            <!-- SECURITY VULNERABILITY ANALYSIS -->
+
+            <section class="result-section">
+                <h3>Vulnerability Analysis</h3>
+
+                <div class="result-card">
+                    ${vulnerabilityHTML}
+                </div>
+            </section>
         `;
 
         message.textContent =
-            "Repository analysis completed successfully!";
+            "Repository analysis completed successfully.";
 
         message.style.color = "#4ade80";
 
+
     } catch (error) {
 
-        console.error("CodeAtlas Error:", error);
-
-        message.textContent =
-            "Analysis failed: " + error.message;
-
-        message.style.color = "#f87171";
+        console.error("Repository analysis error:", error);
 
         results.innerHTML = `
-            <div class="empty-state">
+            <div class="error-card">
                 <h3>Analysis Failed</h3>
-                <p>${escapeHTML(error.message)}</p>
+
+                <p>
+                    ${escapeHTML(
+                        error.message || "Something went wrong."
+                    )}
+                </p>
+
+                <p>
+                    Please check your backend server and try again.
+                </p>
             </div>
         `;
+
+        message.textContent = "Repository analysis failed.";
+        message.style.color = "#ef4444";
 
     } finally {
 
@@ -952,10 +1056,79 @@ async function analyzeRepository() {
 
     }
 }
+// ==========================================
+// AI CODE EXPLANATION
+// ==========================================
+
+async function explainIssue(issueIndex, button) {
+
+    const originalText = button.textContent;
+
+    button.disabled = true;
+    button.textContent = "Generating explanation...";
+
+    try {
+
+        const response = await fetch(`${API_URL}/explain-issue`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                issue_index: issueIndex,
+                analysis_data: lastAnalysisData
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                data.detail || "Unable to generate AI explanation."
+            );
+        }
+
+        const explanation =
+            data.explanation ||
+            data.result ||
+            data.message ||
+            "No explanation was returned.";
+
+        const explanationBox = document.getElementById(
+            `ai-explanation-${issueIndex}`
+        );
+
+        if (explanationBox) {
+
+            explanationBox.style.display = "block";
+
+            explanationBox.textContent = explanation;
+
+        }
+
+        button.textContent = "Explanation Generated";
+
+    } catch (error) {
+
+        console.error("AI explanation error:", error);
+
+        alert(
+            error.message ||
+            "Failed to generate AI explanation."
+        );
+
+        button.textContent = originalText;
+
+    } finally {
+
+        button.disabled = false;
+
+    }
+}
 
 
 // ==========================================
-// HTML ESCAPE FUNCTION
+// HTML ESCAPE HELPER
 // ==========================================
 
 function escapeHTML(value) {
@@ -964,18 +1137,238 @@ function escapeHTML(value) {
         return "";
     }
 
-    return String(value).replace(/[&<>"']/g, character => {
+    return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
 
-        const entities = {
-            "&": "&amp;",
-            "<": "&lt;",
-            ">": "&gt;",
-            '"': "&quot;",
-            "'": "&#039;"
-        };
 
-        return entities[character];
+// ==========================================
+// PDF REPORT DOWNLOAD
+// ==========================================
+
+async function downloadPDFReport(button) {
+
+    if (!lastAnalysisData) {
+
+        alert(
+            "Please analyze a GitHub repository before downloading the PDF report."
+        );
+
+        return;
+    }
+
+    const originalText = button
+        ? button.textContent
+        : "📄 Download PDF Report";
+
+    if (button) {
+        button.disabled = true;
+        button.textContent = "Generating PDF...";
+    }
+
+    try {
+
+        const response = await fetch(`${API_URL}/download-report`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(lastAnalysisData)
+        });
+
+        if (!response.ok) {
+
+            let errorMessage = "PDF report generation failed.";
+
+            try {
+
+                const errorData = await response.json();
+
+                errorMessage =
+                    errorData.detail || errorMessage;
+
+            } catch (error) {
+                // Keep the default error message.
+            }
+
+            throw new Error(errorMessage);
+        }
+
+        const pdfBlob = await response.blob();
+
+        const downloadUrl =
+            window.URL.createObjectURL(pdfBlob);
+
+        const downloadLink =
+            document.createElement("a");
+
+        downloadLink.href = downloadUrl;
+
+        downloadLink.download = "CodeAtlas_Report.pdf";
+
+        document.body.appendChild(downloadLink);
+
+        downloadLink.click();
+
+        downloadLink.remove();
+
+        setTimeout(() => {
+            window.URL.revokeObjectURL(downloadUrl);
+        }, 1000);
+
+        alert("PDF report downloaded successfully!");
+
+    } catch (error) {
+
+        console.error("PDF download error:", error);
+
+        alert(
+            error.message ||
+            "Unable to download the PDF report. Please try again."
+        );
+
+    } finally {
+
+        if (button) {
+
+            button.disabled = false;
+
+            button.textContent = originalText;
+
+        }
+    }
+}
+
+
+// Make PDF function available to dashboard button.
+window.downloadPDFReport = downloadPDFReport;
+
+
+// ==========================================
+// DASHBOARD INTERACTIONS
+// ==========================================
+
+document.addEventListener("DOMContentLoaded", function () {
+
+    // ======================================
+    // SCROLL PROGRESS INDICATOR
+    // ======================================
+
+    const scrollProgress =
+        document.getElementById("scrollProgress");
+
+    window.addEventListener("scroll", function () {
+
+        if (scrollProgress) {
+
+            const scrollTop =
+                document.documentElement.scrollTop ||
+                document.body.scrollTop;
+
+            const scrollHeight =
+                document.documentElement.scrollHeight -
+                document.documentElement.clientHeight;
+
+            const progress = scrollHeight > 0
+                ? (scrollTop / scrollHeight) * 100
+                : 0;
+
+            scrollProgress.style.width =
+                progress + "%";
+        }
 
     });
 
-}
+
+    // ======================================
+    // BACK TO TOP BUTTON
+    // ======================================
+
+    const backToTop =
+        document.getElementById("backToTop");
+
+    if (backToTop) {
+
+        window.addEventListener("scroll", function () {
+
+            if (window.scrollY > 300) {
+
+                backToTop.style.display = "flex";
+
+            } else {
+
+                backToTop.style.display = "none";
+
+            }
+
+        });
+
+        backToTop.addEventListener("click", function () {
+
+            window.scrollTo({
+                top: 0,
+                behavior: "smooth"
+            });
+
+        });
+
+    }
+
+
+    // ======================================
+    // SIDEBAR NAVIGATION
+    // ======================================
+
+    const navLinks =
+        document.querySelectorAll(".main-nav a");
+
+    navLinks.forEach(function (link) {
+
+        link.addEventListener("click", function () {
+
+            navLinks.forEach(function (item) {
+
+                item.classList.remove("active");
+
+            });
+
+            link.classList.add("active");
+
+        });
+
+    });
+
+
+    // ======================================
+    // ENTER KEY TO ANALYZE REPOSITORY
+    // ======================================
+
+    const repoInput =
+        document.getElementById("repoUrl");
+
+    if (repoInput) {
+
+        repoInput.addEventListener("keydown", function (event) {
+
+            if (event.key === "Enter") {
+
+                event.preventDefault();
+
+                analyzeRepository();
+
+            }
+
+        });
+
+    }
+
+});
+
+
+// ==========================================
+// END OF CODEATLAS FRONTEND SCRIPT
+// ==========================================
